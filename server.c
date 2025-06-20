@@ -50,6 +50,7 @@ int main(int argc, char** argv){
 
     printf("서버가 %d 번 포트에서 대기하고 있습니다......\n", PORT);
 
+    
     int client_index = 0;
 
     while(1){ 
@@ -70,6 +71,13 @@ int main(int argc, char** argv){
             continue;
         }
 
+        // 3 단계 개발 : pipe 생성
+        int pipe_fd[2]; // 0 : 부모 read, 1 : 자식 write
+        if(pipe(pipe_fd) == -1){
+            perror("pipe()");
+            return -1;
+        }
+
         // 6. fork() 로 자식 프로세스 생성
         // fork() 시 부모 프로세스의 모든 파일 디스크립터가 자식 프로세스에도 복사됨
         pid_t pid = fork();
@@ -81,6 +89,7 @@ int main(int argc, char** argv){
         } else if(pid == 0){
             // 자식 프로세스 일 때 처리
             // close(listen_fd);  // 자식 프로세스에서는 닫음
+            close(pipe_fd[0]); // 3단계 : 자식 프로세스에서 read 는 닫음
 
             // inet_ntoa() : 네트워크 통신에서 사용된 클라이언트 주소인 네트워크 바이트 순서(빅 엔디안)를 . 으로 구분된 IP 주소 문자열로 변경 
             printf("새 클라이언트 연결: %s\n", inet_ntoa(cli_addr.sin_addr));
@@ -91,11 +100,23 @@ int main(int argc, char** argv){
             // read() : 클라이언트와 연결된 소켓의 conn_fd 로부터 데이터를 읽고 buf 에 담음(읽은 바이트 수인 n 반환)
             // 2 단계 : 다중 클라이언트이므로 연결 소켓 conn_fd 배열 관리(read / write)
             while((n = read(conn_fd[client_index], buf, BUFSIZ)) > 0){
-                write(conn_fd[client_index], buf, n);  // 담은 데이터 버퍼 buf 를 읽은 바이트 수 n 만큼, 즉 모두 그대로 클라이언트 소켓 conn_fd 에 write
+                write(pipe_fd[1], buf, n);  // 3단계 : 담은 데이터 버퍼 buf 를 읽은 바이트 수 n 만큼, 즉 모두 그대로 pipe 에 write
             }
 
         } else {
             // 부모 프로세스일 때 처리
+            close(pipe_fd[1]); // 3단계 : 부모 프로세스에서는 write 닫음
+            // 3 단계 : 자식들이 메시지를 작성하는 pipe 를 읽기 위해 read 루프를 blocking 으로 구현
+            int n;
+            while(1){
+                char pipe_buf[BUFSIZ] = {0};
+                n = read(pipe_fd[0], pipe_buf, sizeof(pipe_buf));
+                if(n > 0){
+                    // 일단 출력
+                    printf("부모 수신 메시지 : %s\n", pipe_buf); 
+                } 
+            }
+
             child_pid[client_index] = pid;
             // 2 단계 : 다중 클라이언트이므로 연결 소켓 conn_fd 배열 관리(close)
             close(conn_fd[client_index]); // 부모 프로세스에서 conn_fd close, 자식 프로세스에서는 소켓 유지
