@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <signal.h>
 
 #define PORT    5100
 
@@ -43,33 +44,41 @@ int main(int argc, char** argv){
     // 연결 성공 메시지 출력
     printf("서버 %s:%d 에 연결되었습니다.\n메시지를 입력하세요. (q 입력 시 종료)\n", argv[1], PORT);
 
-    // 입력 -> 전송 -> 응답 loop
-    while(1){
-        printf(">>> ");
-        // 표준 입력 받기
-        fgets(buf, BUFSIZ, stdin);
 
-        // 입력이 "q" 로 시작하면 종료
-        if(strncmp(buf, "q", 1) == 0) {
-            break;
+    // 4 단계 : 자식 프로세스에서 수신 담당 프로세스 생성 / 부모 프로세스 : 입력 및 전송 담당
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        // 자식: 서버로부터 메시지 수신
+        while (1) {
+            int n = read(sockfd, buf, BUFSIZ);
+            
+            if (n <= 0) {
+                printf("\n[서버 연결 종료]\n");
+                exit(0);
+            }
+            buf[n] = '\0';
+            printf("\n[수신] >>> %s\n", buf);
+            fflush(stdout);  // 입력줄 깨지지 않도록
         }
+    } else {
+        // 부모: 사용자 입력 → 서버 전송
+        while (1) {
+            fgets(buf, BUFSIZ, stdin);
+            // 마지막 문자를 '\0'으로 변경
+            int len = strlen(buf);
+            if (len > 0) {
+                buf[len - 1] = '\0';
+            }
 
-        // 서버로 메시지 전송
-        write(sockfd, buf, strlen(buf));
-
-        // 서버로부터 응답 수신
-        // read() : 서버와 연결된 소켓의 sockfd 로부터 데이터를 읽고 buf 에 담음
-        int n = read(sockfd, buf, BUFSIZ);
-        if(n <= 0){ 
-            perror("서버 연결 종료됨\n");
-            break;
-        } 
-
-        // 수신 문자열 끝 처리
-        buf[n] = '\0';
-
-        // 서버 응답 출력
-        printf("서버 응답 %d : %s", sockfd, buf);
+            // 종료 조건: buf가 "q" 와 정확히 일치할 때 종료
+            if (strcmp(buf, "q") == 0) {
+                printf("종료합니다.\n");
+                kill(pid, SIGTERM); // 자식 프로세스 종료
+                break;
+            }
+            write(sockfd, buf, strlen(buf));
+        }
     }
 
     // 종료 처리
