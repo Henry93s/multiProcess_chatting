@@ -52,6 +52,10 @@ int main(int argc, char** argv){
 
     
     int client_index = 0;
+    // 3 단계 개발 : pipe 생성
+    // pipe 가 자식마다 개별 생성되어 부모가 다수의 pipe 를 관리해야함.
+    int pipe_fd[MAX_CLIENTS][2] = {0}; // 0 : 부모 read, 1 : 자식 write
+    
 
     while(1){ 
         // 2단계 : 현재 클라이언트 수가 10개 이상일 때 break;
@@ -67,15 +71,14 @@ int main(int argc, char** argv){
         // 2단계 : 다중 클라이언트 연결을 위해서 conn_fd 배열 client_index 에 accept 로 소켓의 파일 디스크립터를 받음
         conn_fd[client_index] = accept(listen_fd, (struct sockaddr*)&cli_addr, &cli_len);
         if(conn_fd[client_index] < 0){
-            perror("accept()");
+            perror("accept()"); 
             continue;
         }
 
-        // 3 단계 개발 : pipe 생성
-        int pipe_fd[2]; // 0 : 부모 read, 1 : 자식 write
-        if(pipe(pipe_fd) == -1){
-            perror("pipe()");
-            return -1;
+        // 3 단계 : pipe 생성 오류 처리
+        if(pipe(pipe_fd[client_index]) == -1){
+                perror("pipe()");
+                return -1;
         }
 
         // 6. fork() 로 자식 프로세스 생성
@@ -88,8 +91,8 @@ int main(int argc, char** argv){
             continue;
         } else if(pid == 0){
             // 자식 프로세스 일 때 처리
-            // close(listen_fd);  // 자식 프로세스에서는 닫음
-            close(pipe_fd[0]); // 3단계 : 자식 프로세스에서 read 는 닫음
+            close(listen_fd);  // 자식 프로세스에서는 닫음
+            close(pipe_fd[client_index][0]); // 3단계 : 자식 프로세스에서 read 는 닫음
 
             // inet_ntoa() : 네트워크 통신에서 사용된 클라이언트 주소인 네트워크 바이트 순서(빅 엔디안)를 . 으로 구분된 IP 주소 문자열로 변경 
             printf("새 클라이언트 연결: %s\n", inet_ntoa(cli_addr.sin_addr));
@@ -98,29 +101,31 @@ int main(int argc, char** argv){
             // 7. 클라이언트로부터 메시지를 받고 다시 전송 (echo 버전)
             int n;
             // read() : 클라이언트와 연결된 소켓의 conn_fd 로부터 데이터를 읽고 buf 에 담음(읽은 바이트 수인 n 반환)
-            // 2 단계 : 다중 클라이언트이므로 연결 소켓 conn_fd 배열 관리(read / write)
+            // 3 단계 : 자식들이 메시지를 작성하는 pipe 를 읽기 위해 read 루프를 blocking 으로 구현
             while((n = read(conn_fd[client_index], buf, BUFSIZ)) > 0){
-                write(pipe_fd[1], buf, n);  // 3단계 : 담은 데이터 버퍼 buf 를 읽은 바이트 수 n 만큼, 즉 모두 그대로 pipe 에 write
+                write(pipe_fd[client_index][1], buf, n);  // 3단계 : 담은 데이터 버퍼 buf 를 읽은 바이트 수 n 만큼, 즉 모두 그대로 pipe 에 write
             }
 
+            close(conn_fd[client_index]);
+            // 3단계 : 자식 프로세스가 더 이상 메시지를 보내지 않을 때('q' 입력 등) 
+            close(pipe_fd[client_index][1]);
+            exit(0); // 자식 프로세스 정상 종료
         } else {
             // 부모 프로세스일 때 처리
-            close(pipe_fd[1]); // 3단계 : 부모 프로세스에서는 write 닫음
-            // 3 단계 : 자식들이 메시지를 작성하는 pipe 를 읽기 위해 read 루프를 blocking 으로 구현
-            int n;
-            while(1){
-                char pipe_buf[BUFSIZ] = {0};
-                n = read(pipe_fd[0], pipe_buf, sizeof(pipe_buf));
-                if(n > 0){
-                    // 일단 출력
-                    printf("부모 수신 메시지 : %s\n", pipe_buf); 
-                } 
-            }
-
+            close(pipe_fd[client_index][1]); // 3단계 : 부모 프로세스에서는 write 닫음
             child_pid[client_index] = pid;
+
             // 2 단계 : 다중 클라이언트이므로 연결 소켓 conn_fd 배열 관리(close)
             close(conn_fd[client_index]); // 부모 프로세스에서 conn_fd close, 자식 프로세스에서는 소켓 유지
             client_index++; // 다음 클라이언트를 위해서 인덱스 증가
+        }
+
+        // 3단계 : 부모에서 pipe 읽기 (단일 읽기 시도, 다음 4단계에서 별도 루프로 반복 예정)
+        for (int i = 0; i < client_index; i++) {
+            int n = read(pipe_fd[i][0], buf, BUFSIZ);
+            if (n > 0) {
+                printf("부모 수신 메시지 (from child %d): %s\n", child_pid[i], buf);
+            }
         }
     }
 
