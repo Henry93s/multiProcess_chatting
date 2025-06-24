@@ -15,15 +15,20 @@ void handle_sigchld(int signo) {
     while (waitpid(-1, NULL, WNOHANG) > 0);
 }
 
+// sigaction 커스텀 함수
 void register_sigaction(int signo, void (*handler)(int)) {
+    // 시그널 처리를 위한 시그널 액션
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
 
+    // 터미널 제어 관련 시그널 관리
+    sa.sa_handler = handler; // 시그널 발생 시 실행할 핸들러 지정
+    sigemptyset(&sa.sa_mask); // 모든 시그널 허용
+    sa.sa_flags = SA_RESTART; // 시스템 콜 중 시그널 발생 시 자동 재시도
+
+    // 시그널 처리 동작 처리
     if (sigaction(signo, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("register_sigaction()");
         exit(1);
     }
 }
