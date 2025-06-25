@@ -37,8 +37,8 @@ ClientData clients[MAX_CLIENTS]; // 기존 child_pid, client_sock 배열 통합
 RoomData rooms[MAX_ROOMS]; // 채팅방 배열
 
 // 3 -> 4단계: 전역 변수로 pipe, conn_sock, child_pid 정의
-int pipe_parent_to_child[MAX_CLIENTS][2]; // 부모 → 자식
-int pipe_child_to_parent[MAX_CLIENTS][2]; // 자식 → 부모
+int pipe_parent_to_child[MAX_CLIENTS][2]; // 부모 → 자식 write 기준으로 변수 이름 정의 
+int pipe_child_to_parent[MAX_CLIENTS][2]; // 자식 → 부모 write 기준으로 변수 이름 정의
 
 // chat-dev1 : 실제 루프를 돌 때 사용할 경계 값 추가
 int active_client_count = 0;
