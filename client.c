@@ -6,11 +6,15 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 #define PORT    5101
 
 int sockfd; // 소켓 파일 디스크립터
 char nickname[51]; // 닉네임
+
+// 0625 구조 수정 : 전역 변수로 자식 -> 부모 데이터 파이프 선언
+int pipe_child_to_parent[2];
 
 // 6 단계 : 클라이언트에서 fork된 자식(수신용) 프로세스가 종료되었을 때 부모가 기다리지 않아서 발생하는 좀비 프로세스 방지 
 void handle_sigchld(int signo) {
@@ -40,14 +44,84 @@ void register_sigaction(int signo, void (*handler)(int)) {
     }
 }
 
+// 프로젝트 제한사항에 따른 client 구조 수정
+// => sigusr1_handler 를 client 부모 프로세스에 등록하고 client 자식 프로세스에서 SIGNAL 알림을 보내면
+// client 부모 프로세스에서 server 의 자식 프로세스(해당 클라이언트 담당 프로세스) 에 write 
+// => client 부모 프로세스에서 server 의 자식 프로세스(해당 클라이언트 담당 프로세스) 에서 read 
+void sigusr1_handler(int signo){
+    // client 자식 프로세스에서 메시지 입력 감지 시그널 알림으로 client 부모 프로세스에서 이벤트 동작 시작
+    char buf[BUFSIZ + 10 + 50];
+    int n;
+
+    memset(buf, 0, BUFSIZ);
+
+    // command 동작
+    char ch[10];
+    char str[BUFSIZ];
+
+    // non-blocking read
+    n = read(pipe_child_to_parent[0], buf, BUFSIZ);
+    if(n <= 0){
+        return; // 읽은 데이터 없음
+    }
+    buf[n] = '\0';
+
+    // chat-dev2 : 명령어 동작일 경우 있는 buf 파이프에 있는 그대로 문자열을 보냄
+    if(buf[0] == '/'){
+        // 파이프에 있는 문자열을 서버로 보냄
+        write(sockfd, buf, strlen(buf));
+    } else {
+        // client 자식으로부터 받은 버퍼 메시지 문자열 분리
+        // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
+        // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+        char* space = strchr(buf, ' ');
+        if (space != NULL) {
+            sscanf(buf, "/%s", ch);
+            strcpy(str, space + 1);  // 공백 이후 문자열 복사
+        }
+        
+        if(ch == NULL){
+            return;
+        }
+        if(strcmp(ch, "MSG") == 0){
+            char nickName[51];
+            char msg[BUFSIZ];
+
+            // 채팅 메시지를 닉네임과 채팅 msg 로 분리
+            char* colon = strchr(str, ':');
+            if (colon != NULL) {
+                *colon = '\0'; // ':'를 문자열 종료로 바꿈
+                strcpy(nickName, str);
+                strcpy(msg, colon + 1);
+
+                // 0625 구조 수정 : 시그널을 받고 파이프에 있는 데이터를 서버에 전달
+                // 서버로 보낼 메시지 프로토콜 생성
+                char sendMsg[BUFSIZ + 12 + 50];
+                // 서버에 보낼 문자열 결합
+                snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, msg);
+                
+                // 파이프에 있는 문자열을 서버로 보냄
+                write(sockfd, sendMsg, strlen(sendMsg));
+            }
+        } 
+    }
+}
+
 // 서버로부터 메시지를 받아 파싱하고 출력하는 함수
+// 부모 read : 메시지 파싱 후 동작
 void process_server_message(char *buf) {
     // command 동작
     char ch[10];
     char str[BUFSIZ];
 
     // 서버로부터 받은 버퍼 문자열 분리
-    sscanf(buf, "/%s %s", ch, str);
+    // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
+    // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+    char* space = strchr(buf, ' ');
+    if (space != NULL) {
+        sscanf(buf, "/%s", ch);
+        strcpy(str, space + 1);  // 공백 이후 문자열 복사
+    }
 
     if (ch == NULL) {
         return;
@@ -69,6 +143,11 @@ void process_server_message(char *buf) {
             printf("\n[%s] >>> %s\n", nickName, msg);
             fflush(stdout);  // 입력줄 깨지지 않도록
         } 
+    } // 서버로 부터 채팅방 개설 요청에 대한 결과를 받고, 이를 클라이언트에 처리 결과를 알림
+    else if(strcmp(ch, "ADD") == 0){
+        // 메시지 출력
+        printf("\n%s\n", str);
+        fflush(stdout);  // 입력줄 깨지지 않도록
     }
     // 여기에 다른 서버 응답(/list 응답 등) 처리 로직 추가
     
@@ -149,35 +228,28 @@ int main(int argc, char** argv){
         }
     }
 
+    // 0625 구조 수정 : 자식 프로세스에서 부모 프로세스에 보낼 데이터를 파이프로 전송하기 위한 파이프 정의
+    if(pipe(pipe_child_to_parent) == -1 || pipe(pipe_child_to_parent) == -1){
+        perror("pipe_child_to_parent create : ");
+        close(sockfd);
+        return -1;
+    }
+
+    // 0625 구조 수정 : 자식 프로세스에서 보낼 메시지가 있다는걸 알리기 위한 시그널 등록
+    register_sigaction(SIGUSR1, sigusr1_handler);
+            
     // 6 단계 : 좀비 프로세스 핸들러 등록
     register_sigaction(SIGCHLD, handle_sigchld);
     
     // 로비 입장
-    printf("--- Lobby ---\n");
-    printf("채팅을 입력하세요. (명령어 : )\n");
+    printf("--- Chatting Lobby Room ---\n");
+    printf("채팅을 입력하세요.\n (명령어 /ADD 이름 : 채팅방을 '이름' 으로 개설 요청)\n");
 
     // 4 단계 : 자식 프로세스에서 수신 담당 프로세스 생성 / 부모 프로세스 : 입력 및 전송 담당
     pid_t pid = fork();
 
     if (pid == 0) {
-        // 자식: 서버로부터 메시지 수신
-        // -> FIX : 자식 프로세스에서 
-        while (1) {
-            int n = read(sockfd, buf, BUFSIZ + 10 + 50);
-            // 서버가 연결을 종료했거나 오류 발생 시
-            // 0 : 서버에서 연결이 종료될 때 반환되는 EOF(EndOfFile)
-            // -1 : 오류 발생
-            if (n <= 0) {
-                printf("\n[서버 연결 종료]\n");
-                kill(getppid(), SIGTERM); // 부모에게 종료 알림
-                exit(0);
-            } else {
-                buf[n] = '\0';
-                process_server_message(buf);
-            }
-        }
-    } else {
-        // 부모: 사용자 입력 → 서버 전송
+        // 0625 구조 수정 : 자식: 사용자 입력 → 부모로 시그널 알림
         while (1) {
             fgets(buf, BUFSIZ, stdin);
             // 마지막 문자를 '\0'으로 변경
@@ -194,15 +266,80 @@ int main(int argc, char** argv){
                 printf("[클라이언트] 종료 요청 전송 완료. 종료합니다.\n");
                 break; // break 시 pid SIGTERM 시그널 발생으로 정리
             }
-            // '/leave', '/q' 등 클라이언트 측 명령어 처리
             
-            // 서버로 보낼 메시지 프로토콜 생성
+            // chat-dev2 : 위치 이동 - pipe 로 보낼 메시지 프로토콜 생성
             char sendMsg[BUFSIZ + 12 + 50];
-            // 서버에 보낼 문자열 결합
-            snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, buf);
-            write(sockfd, sendMsg, strlen(sendMsg));
+
+            // chat-dev2 : 자식 클라이언트에서 입력한 문자열이 / 로 시작하는 명령어일 경우
+            if(buf[0] == '/'){
+                char ch[10], str[BUFSIZ + 12 + 50];
+                // stdin 으로 받은 문자열 분리
+                // stdin 으로 받는 문자열 예시 1 : /NICK NICKNAME
+                // 예시 2 : /MSG NICKNAME:MSG
+                // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
+                // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+                char* space = strchr(buf, ' ');
+                if (space != NULL) {
+                    sscanf(buf, "/%s", ch);
+                    strcpy(str, space + 1);  // 공백 이후 문자열 복사
+                }
+
+                // chat-dev2 : /add 채팅방 추가
+                // 클라이언트에서 먼저 체크 사항: 채팅방 이름 입력 여부, 채팅방 이름 글자 수 제한 충족 여부
+                if(strcmp(ch, "ADD") == 0){
+                    if(strlen(str) == 0){
+                        printf("채팅방 이름이 작성되지 않았습니다.\n");
+                        continue;
+                    }
+                    if(strlen(str) < 6){
+                        printf("채팅방 이름은 6바이트 미만(한글 2글자미만) 으로 생성할 수 없습니다.\n");
+                        continue;
+                    }
+                    if(strlen(str) >= 100){
+                        printf("채팅방 이름은 100바이트 이상 으로 생성할 수 없습니다.\n");
+                        continue;
+                    }
+                    // pipe 에 보낼 문자열 str 그대로 (명령어 동작이므로 결합 필요없이 그대로 보냄)
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", buf);
+                } else { // / 명령에 없는 동작일 경우 예외 처리(클라이언트)
+                    printf("해당 명령어는 존재하지 않는 명령어입니다.\n");
+                    continue;
+                }
+
+            } else { // chat-dev2 : 자식 클라이언트에서 입력한 문자열이 명령어가 아닐 경우 
+                // 현재 채팅방에 전송할 메시지로 동작함 (/MSG 로 동작)
+                // pipe 에 보낼 문자열 결합
+                snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, buf);
+            }
+
+            // 0625 구조 수정 : pipe 에 서버에 보낼 문자열을 쓰고
+            write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
+            // 0625 구조 수정 : 부모 프로세스에 보낼 문자열이 있다는 걸 시그널로 알림
+            kill(getppid(), SIGUSR1);
         }
         kill(pid, SIGTERM); // 자식 프로세스 종료
+    } else {
+        // 0625 구조 수정 : 부모 : 자식으로부터 시그널을 받고 메시지를 프로토콜 전송 or 서버로부터 메시지를 받음 
+        while (1) {
+            // read 파트를 위한 부분 시작 : 서버로부터 메시지를 받고 process_server_message 처리에 따른 동작
+            int n = read(sockfd, buf, BUFSIZ + 10 + 50);
+            // 서버가 연결을 종료했거나 오류 발생 시
+            // 0 : 서버에서 연결이 종료될 때 반환되는 EOF(EndOfFile)
+            // -1 : 오류 발생
+            if (n <= 0) {
+                printf("\n[서버 연결 종료]\n");
+                kill(getppid(), SIGTERM); // 부모에게 종료 알림
+                exit(0);
+            } else {
+                buf[n] = '\0';
+                process_server_message(buf);
+            }
+
+            // write part 를 위한 부분 시작 : 자식으로부터 시그널을 받고 서버에 메시지 전달
+            // 부모가 읽는 파이프를 non-blocking 모드로 설정해 핸들러가 멈추지 않도록 함
+            int flags = fcntl(pipe_child_to_parent[0], F_GETFL, 0);
+            fcntl(pipe_child_to_parent[0], F_SETFL, flags | O_NONBLOCK);
+        }
     }
 
     // 종료 처리
