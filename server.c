@@ -234,13 +234,6 @@ void sigusr1_handler(int signo) {
             else if(strcmp(ch, "LEAVE") == 0){
                 char sendMsg[500];
 
-                char ch[10], str[BUFSIZ + 12 + 50];
-                char* space = strchr(buf, ' ');
-                if (space != NULL) {
-                    sscanf(buf, "/%s", ch);
-                    strcpy(str, space + 1);  // 공백 이후 문자열 복사
-                }
-
                 // 이미 로비에서 Leave 명령어 수행 시 동작하지 않음
                 if(strcmp(str, "lobby") == 0){
                     if(clients[i].room_idx == 0){
