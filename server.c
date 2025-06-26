@@ -152,7 +152,7 @@ void sigusr1_handler(int signo) {
                 
                 // chat-dev2 : 채팅을 보낼 때 무슨 채팅방에서 보냈는지 를 닉네임 앞에 추가함
                 char WhereIsRoomAndNickname[BUFSIZ * 2];
-                snprintf(WhereIsRoomAndNickname, sizeof(WhereIsRoomAndNickname), "%s 채널방(%d) ", rooms[sender_room].roomName, sender_room);
+                snprintf(WhereIsRoomAndNickname, sizeof(WhereIsRoomAndNickname), "%s 채널(%d) ", rooms[sender_room].roomName, sender_room);
                 strcat(WhereIsRoomAndNickname, sendnickName);
 
                 snprintf(broadcast_msg, sizeof(broadcast_msg), "/MSG %s:%s", WhereIsRoomAndNickname, msg);
@@ -169,8 +169,13 @@ void sigusr1_handler(int signo) {
                 // 서버에서 체크 사항 : 채팅방 최대 수용량 체크, 채팅방 이름 중복 여부 확인 후  
                 // 허용 가능할 때 roomData 의 is_active 를 활성화시키고, 요청한 클라이언트의 clientData 의 room_idx 를 해당 room 으로 변경한다. 
             } else if(strcmp(ch, "ADD") == 0){
+                // chat-dev2 : 클라이언트의 부모 프로세스로 부터 받은 문자열을 받고 
+                // 명령어에 따라 문자열 파싱 + 파이프에 write + 현재(서버)의 부모 프로세스로 시그널 알림 동작이 발생함
+                // chat-dev2 : /add 채팅방 추가
+                // 서버에서 체크 사항 : 채팅방 최대 수용량 체크, 채팅방 이름 중복 여부 확인 후  
+                // 허용 가능할 때 roomData 의 is_active 를 활성화시키고, 요청한 클라이언트의 clientData 의 room_idx 를 해당 room 으로 변경한다. 
+                
                 char tempMsg[BUFSIZ];
-
                 int is_valid = 0; // 채팅방 개설 가능 여부 변수
 
                 // 채팅방 최대 수용량 및 채팅방 이름 중복 여부 확인
@@ -202,7 +207,6 @@ void sigusr1_handler(int signo) {
                     strcpy(str2, space + 1);  // 공백 이후 문자열 복사
                 }
 
-
                 char sendMsg[500];
                 if(strcmp(str2, "DUP") == 0){
                     snprintf(sendMsg, sizeof(sendMsg), "/ADD %s", "중복된 채팅방 이름입니다.\n");
@@ -219,9 +223,6 @@ void sigusr1_handler(int signo) {
                     strcpy(rooms[inputRoomNum].roomName, inputRoomName); // 활성화한 채팅방 이름 변경
                     clients[i].room_idx = inputRoomNum; // 클라이언트의 채팅방 위치 변경
 
-                    printf("\n\ntest: %d\n%s\n\n", inputRoomNum, inputRoomName);
-                    fflush(stdout);
-
                     snprintf(sendMsg, sizeof(sendMsg), "/ADD %d 번째 %s 채팅방을 만들고 입장했습니다.", inputRoomNum, inputRoomName);
                 }
                 
@@ -229,6 +230,32 @@ void sigusr1_handler(int signo) {
                 write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
                 // 후 서버 자식 프로세스(해당 클라이언트 담당 프로세스)에게 시그널 알림
                 kill(clients[i].pid, SIGUSR2); 
+            } // chat-dev3 : /LEAVE 명령어. 현재 클라이언트가 로비 채널이 아닌 채팅방에 있을 때만, 로비 채널로 이동 시켜 준다.
+            else if(strcmp(ch, "LEAVE") == 0){
+                char sendMsg[500];
+
+                char ch[10], str[BUFSIZ + 12 + 50];
+                char* space = strchr(buf, ' ');
+                if (space != NULL) {
+                    sscanf(buf, "/%s", ch);
+                    strcpy(str, space + 1);  // 공백 이후 문자열 복사
+                }
+
+                // 이미 로비에서 Leave 명령어 수행 시 동작하지 않음
+                if(strcmp(str, "lobby") == 0){
+                    if(clients[i].room_idx == 0){
+                        snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 이미 로비(Lobby) 채널에 있는 유저입니다.");    
+                    } else {
+                        // 로비가 아닌 다른 채팅방에 있는 클라이언트일 경우 로비 채널로 이동
+                        clients[i].room_idx = 0;
+                        snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 로비(Lobby) 채널로 이동합니다.");
+                    }
+                } else {
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 잘못된 명령 문구를 입력했습니다.");    
+                }
+                
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
             }
             
             // 추후 /join, /leave 등 다른 명령어 처리 로직 추가 예정
@@ -603,6 +630,7 @@ int main(int argc, char** argv) {
             int n;
             while (1) {
                 memset(buf, 0, BUFSIZ); // 버퍼를 0 으로 초기화
+                // chat-dev2 : 클라이언트로부터 받은 문자열이 / 으로 들어오게 됨
                 n = read(conn_fd, buf, sizeof(buf)-1);
 
                 // 6 단계 : read() 가 <= 0 일 때 graceful 연결 종료 처리를 위한 부분 처리
@@ -636,23 +664,7 @@ int main(int argc, char** argv) {
                 // 자식 → 부모 전송
                 buf[n] = '\0'; // 문자열 끝 처리
 
-                // chat-dev2 : 클라이언트의 부모 프로세스로 부터 받은 문자열을 받고 
-                // 명령어에 따라 문자열 파싱 + 파이프에 write + 현재(서버)의 부모 프로세스로 시그널 알림 동작
-                
-                // chat-dev2 : 클라이언트로부터 받은 문자열이 / 으로 시작할 경우 -> 명령어 동작임
-                char sendMsg[BUFSIZ + 12 + 50];
-
-                char ch[10], str[BUFSIZ + 12 + 50];
-                // 클라이언트로부터 받은 문자열 분리
-                char* space = strchr(buf, ' ');
-                if (space != NULL) {
-                    sscanf(buf, "/%s", ch);
-                    strcpy(str, space + 1);  // 공백 이후 문자열 복사
-                }
-
-                // chat-dev2 : /add 채팅방 추가
-                // 서버에서 체크 사항 : 채팅방 최대 수용량 체크, 채팅방 이름 중복 여부 확인 후  
-                // 허용 가능할 때 roomData 의 is_active 를 활성화시키고, 요청한 클라이언트의 clientData 의 room_idx 를 해당 room 으로 변경한다. 
+                // 자식 프로세스에서 서버 부모 프로세스에 데이터를 파이프 작성으로 통해서 전달하도록 함
                 write(pipe_child_to_parent[child_index][1], buf, n); // 3->4단계: 자식 → 부모로 write
                 // 7단계 : LOG Redirection
                 char logMsg[BUFSIZ * 2 + 32];

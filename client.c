@@ -143,12 +143,13 @@ void process_server_message(char *buf) {
             printf("\n[%s] >>> %s\n", nickName, msg);
             fflush(stdout);  // 입력줄 깨지지 않도록
         } 
-    } // 서버로 부터 채팅방 개설 요청에 대한 결과를 받고, 이를 클라이언트에 처리 결과를 알림
-    else if(strcmp(ch, "ADD") == 0){
+    } // chat-dev2 : 서버로 부터 채팅방 개설 요청에 대한 결과를 받고, 이를 클라이언트에 처리 결과를 알림
+    // chat-dev3 : /LEAVE 명령어. 서버로부터 처리와 처리 결과를 반환 받고 메시지를 출력
+    else if(strcmp(ch, "ADD") == 0 | strcmp(ch, "LEAVE") == 0){
         // 메시지 출력
         printf("\n%s\n", str);
         fflush(stdout);  // 입력줄 깨지지 않도록
-    }
+    } 
     // 여기에 다른 서버 응답(/list 응답 등) 처리 로직 추가
     
 }
@@ -243,7 +244,8 @@ int main(int argc, char** argv){
     
     // 로비 입장
     printf("--- Chatting Lobby Room ---\n");
-    printf("채팅을 입력하세요.\n (명령어 /ADD 이름 : 채팅방을 '이름' 으로 개설 요청)\n");
+    printf("채팅을 입력하세요.\n \
+        (명령어 /ADD 이름 : 채팅방을 '이름' 으로 개설 요청\n/LEAVE lobby : 현재 있는 채팅방을 나오고 로비 채널로 이동하도록 요청\n");
 
     // 4 단계 : 자식 프로세스에서 수신 담당 프로세스 생성 / 부모 프로세스 : 입력 및 전송 담당
     pid_t pid = fork();
@@ -278,44 +280,52 @@ int main(int argc, char** argv){
                 // 예시 2 : /MSG NICKNAME:MSG
                 // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
                 // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+                
                 char* space = strchr(buf, ' ');
-                if (space != NULL) {
+                if (space != NULL) { // 공백이 포함되어 있을 때만 동작
                     sscanf(buf, "/%s", ch);
                     strcpy(str, space + 1);  // 공백 이후 문자열 복사
-                }
 
-                // chat-dev2 : /add 채팅방 추가
-                // 클라이언트에서 먼저 체크 사항: 채팅방 이름 입력 여부, 채팅방 이름 글자 수 제한 충족 여부
-                if(strcmp(ch, "ADD") == 0){
-                    if(strlen(str) == 0){
-                        printf("채팅방 이름이 작성되지 않았습니다.\n");
+                    // chat-dev2 : /add 채팅방 추가
+                    // 클라이언트에서 먼저 체크 사항: 채팅방 이름 입력 여부, 채팅방 이름 글자 수 제한 충족 여부
+                    if(strcmp(ch, "ADD") == 0){
+                        if(strlen(str) < 6){
+                            printf("채팅방 이름은 6바이트 미만(한글 2글자미만) 으로 생성할 수 없습니다.\n");
+                            continue;
+                        }
+                        if(strlen(str) >= 100){
+                            printf("채팅방 이름은 100바이트 이상 으로 생성할 수 없습니다.\n");
+                            continue;
+                        }
+                        // pipe 에 보낼 문자열 str 그대로 (명령어 동작이므로 결합 필요없이 그대로 보냄)
+                        snprintf(sendMsg, sizeof(sendMsg), "%s", buf);
+                        // 0625 구조 수정 : pipe 에 서버에 보낼 문자열을 쓰고
+                        write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
+                        // 0625 구조 수정 : 부모 프로세스에 보낼 문자열이 있다는 걸 시그널로 알림
+                        kill(getppid(), SIGUSR1);
+                        
+                    } // chat-dev3 : /LEAVE 명령어 - 로비가 아닌 접속한 채팅방을 나오는 명령어
+                    else if (strcmp(ch, "LEAVE") == 0){
+                        // pipe 에 작성할 문자열 작성
+                        snprintf(sendMsg, sizeof(sendMsg), "%s", buf);
+                        // 0625 구조 수정 : pipe 에 서버에 보낼 문자열을 쓰고
+                        write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
+                        // 0625 구조 수정 : 부모 프로세스에 보낼 문자열이 있다는 걸 시그널로 알림
+                        kill(getppid(), SIGUSR1);
+                    } 
+                } else { // / 명령어 동작을 잘못했을 경우 예외 처리(클라이언트)
+                        printf("명령어 동작 방법을 확인하고 다시 입력해주세요.\n");
                         continue;
-                    }
-                    if(strlen(str) < 6){
-                        printf("채팅방 이름은 6바이트 미만(한글 2글자미만) 으로 생성할 수 없습니다.\n");
-                        continue;
-                    }
-                    if(strlen(str) >= 100){
-                        printf("채팅방 이름은 100바이트 이상 으로 생성할 수 없습니다.\n");
-                        continue;
-                    }
-                    // pipe 에 보낼 문자열 str 그대로 (명령어 동작이므로 결합 필요없이 그대로 보냄)
-                    snprintf(sendMsg, sizeof(sendMsg), "%s", buf);
-                } else { // / 명령에 없는 동작일 경우 예외 처리(클라이언트)
-                    printf("해당 명령어는 존재하지 않는 명령어입니다.\n");
-                    continue;
                 }
-
             } else { // chat-dev2 : 자식 클라이언트에서 입력한 문자열이 명령어가 아닐 경우 
                 // 현재 채팅방에 전송할 메시지로 동작함 (/MSG 로 동작)
                 // pipe 에 보낼 문자열 결합
                 snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, buf);
+                // 0625 구조 수정 : pipe 에 서버에 보낼 문자열을 쓰고
+                write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
+                // 0625 구조 수정 : 부모 프로세스에 보낼 문자열이 있다는 걸 시그널로 알림
+                kill(getppid(), SIGUSR1);
             }
-
-            // 0625 구조 수정 : pipe 에 서버에 보낼 문자열을 쓰고
-            write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
-            // 0625 구조 수정 : 부모 프로세스에 보낼 문자열이 있다는 걸 시그널로 알림
-            kill(getppid(), SIGUSR1);
         }
         kill(pid, SIGTERM); // 자식 프로세스 종료
     } else {
