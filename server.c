@@ -21,7 +21,7 @@
 // chat-dev1 : 서버 측 데이터 구조 정의 - 클라이언트를 pid 가 아닌 닉네임, 현재 접속한 방 등의 정보로 관리할 구조체 정의
 typedef struct {
     pid_t pid;
-    int client_sock_fd; // 기존 client_sock 배열
+    int client_sock_fd; // sock_fd
     char nickName[50];
     int room_idx; // 현재 접속한 방 index (0 : lobby)
 } ClientData;
@@ -268,6 +268,42 @@ void sigusr1_handler(int signo) {
                         memset(rooms[rm_i].roomName, 0, sizeof(rooms[rm_i].roomName));
                     } else { // 삭제하려는 채팅 채널이 없음(입력한 채팅 채널 이름이 잘못됨)
                         snprintf(sendMsg, sizeof(sendMsg), "/RM %s 이름을 가진 채팅 채널이 없습니다.", str);
+                    }
+                }
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
+            }
+            // chat-dev4 : /USERS all - 현재 채팅 서버에 접속한 모든 클라이언트 유저 정보(해당 유저가 접속한 채팅방, 유저 이름) 를 출력
+            //             /USERS 채팅방이름 - 해당 채팅 채널방에 속해 있는 모든 클라이언트 유저 정보를 출력
+            else if(strcmp(ch, "USER") == 0){
+                char sendMsg[1024 * 5];
+
+                // 현재 채팅 서버에 접속한 모든 클라이언트 유저 정보를 파이프에 작성하고 자식 프로세스에 시그널 alarm
+                if(strcmp(str, "all") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/USER 전체 유저 정보\n");
+                    for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
+                        if(clients[client_i].pid > 0){
+                            char tempBuf[BUFSIZ * 2];
+                            snprintf(tempBuf, sizeof(tempBuf), "<USER : %s>   [Channel : %s]\n", clients[client_i].nickName, rooms[clients[client_i].room_idx].roomName);
+                            strcat(sendMsg, tempBuf);
+                        }
+                    }
+                } // 특정 채팅방의 유저 정보를 출력 (없을 경우 그에 따른 문구 출력)
+                else {
+                    int is_empty = 1;
+                    for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
+                        char tempBuf[BUFSIZ * 2];
+                        if(clients[client_i].pid > 0 && strcmp(rooms[clients[client_i].room_idx].roomName, str) == 0) {
+                            if(is_empty){
+                                is_empty = 0;
+                                snprintf(sendMsg, sizeof(sendMsg), "/USER 채널 [%s] 유저 정보\n", str);
+                            }
+                            snprintf(tempBuf, sizeof(tempBuf), "<USER : %s>   [Channel : %s]\n", clients[client_i].nickName, rooms[clients[client_i].room_idx].roomName);
+                            strcat(sendMsg, tempBuf);
+                        }
+                    }
+                    if(is_empty){
+                        snprintf(sendMsg, sizeof(sendMsg), "/USER [%s] 채팅 채널은 존재하지 않거나, 인원이 없는 채팅 채널방입니다.", str);
                     }
                 }
                 write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
