@@ -146,7 +146,9 @@ void process_server_message(char *buf) {
     } // chat-dev2 : 서버로 부터 채팅방 개설 요청에 대한 결과를 받고, 이를 클라이언트에 처리 결과를 알림
     // chat-dev3 : /LEAVE 명령어. 서버로부터 처리와 처리 결과를 반환 받고 메시지를 출력
     // chat-dev4 : /USER all - 서버에 접속한 전체 유저 정보를 출력, /USER 채팅방이름 - 서버의 특정 채팅 채널방에 있는 유저 정보들을 출력
-    else if(strcmp(ch, "ADD") == 0 || strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0){
+    // chat-dev4 : /LIST all - 서버에 활성화된 채팅채널 목록을 출력함
+    // chat-dev4 : /JOIN 채널방이름 - 서버에 활성화된 채팅 채널방으로 이동함
+    else if(strcmp(ch, "ADD") == 0 || strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0 || strcmp(ch, "JOIN") == 0){
         // 메시지 출력
         printf("\n%s\n", str);
         fflush(stdout);  // 입력줄 깨지지 않도록
@@ -246,7 +248,7 @@ int main(int argc, char** argv){
     // 로비 입장
     printf("--- Chatting Lobby Room ---\n");
     printf("채팅을 입력하세요.\n \
-        (명령어 모음\n\t/ADD 이름 : 채팅방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채팅방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채팅방이름 : 로비가 아닌 채팅방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채팅방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채널방 리스트를 출력함\n");
+        (명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n");
 
     // 4 단계 : 자식 프로세스에서 수신 담당 프로세스 생성 / 부모 프로세스 : 입력 및 전송 담당
     pid_t pid = fork();
@@ -310,7 +312,8 @@ int main(int argc, char** argv){
                     // chat-dev4 : /USERS all - 현재 채팅 서버에 접속한 모든 클라이언트 유저 정보(해당 유저가 접속한 채팅방, 유저 이름) 를 출력
                     //             /USERS 채팅방이름 - 해당 채팅 채널방에 속해 있는 모든 클라이언트 유저 정보를 출력
                     // chat-dev4 : /LIST all - 모든 채널방 리스트를 출력함
-                    else if (strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0){
+                    // chat-dev4 : /JOIN 채널방이름 - 서버에 활성화된 채팅 채널방으로 이동함
+                    else if (strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0 || strcmp(ch, "JOIN") == 0){
                         // pipe 에 작성할 문자열 작성
                         snprintf(sendMsg, sizeof(sendMsg), "%s", buf);
                         write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));

@@ -328,6 +328,40 @@ void sigusr1_handler(int signo) {
                 write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
                 kill(clients[i].pid, SIGUSR2);
             }
+            // chat-dev4 : /JOIN 채팅방이름 : 클라이언트가 기존 채팅 채널에서 새 채널로 이동한다.
+            // 단, 기존과 동일한 채널을 선택하거나 없는 채널방이름을 입력했을 땐 그에 따른 주의 문구를 출력함
+            else if(strcmp(ch, "JOIN") == 0){
+                char sendMsg[BUFSIZ];
+
+                // 목적지 채널은 활성화되었지만, 클라이언트가 이미 목적지 채팅채널에 있을 때 처리
+                if(rooms[clients[i].room_idx].is_active && 
+                    strcmp(rooms[clients[i].room_idx].roomName, str) == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "/JOIN 이미 [%s] 채팅 채널에 있습니다.", str);
+                } 
+                // 목적지 채널도 활성화되어있고, 클라이언트가 현재 있는 채널과 목적지 채널이 다를 때(정상)
+                else if(rooms[clients[i].room_idx].is_active && 
+                    strcmp(rooms[clients[i].room_idx].roomName, str) != 0){
+                    int is_notFound = 1;
+                    snprintf(sendMsg, sizeof(sendMsg), "/JOIN [%s] 채팅 채널에 참가했습니다.", str);
+                    // client data 변경 진행 (채팅 채널 이동)
+                    for(int room_i = 0; room_i < MAX_ROOMS; room_i++){
+                        if(rooms[room_i].is_active && strcmp(rooms[room_i].roomName, str) == 0){
+                            // 채널 이동
+                            clients[i].room_idx = room_i;
+                            is_notFound = 0;
+                            break;
+                        }
+                    }
+                    if(is_notFound){ // 목적지 채널이 비활성화이거나, 입력한 채널명을 가진 채팅채널이 없을 때 처리
+                        snprintf(sendMsg, sizeof(sendMsg), "/JOIN [%s] 채팅 채널이 비활성화이거나, 해당 채팅 채널이 존재하지 않습니다.", str);
+                    }
+                } else { 
+                    snprintf(sendMsg, sizeof(sendMsg), "/JOIN [%s] 잘못된 채팅 채널명을 입력했습니다.", str);
+                }
+
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
+            } 
             
             // 추후 /join, /leave 등 다른 명령어 처리 로직 추가 예정
         }
