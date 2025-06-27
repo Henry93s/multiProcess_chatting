@@ -308,6 +308,25 @@ void sigusr1_handler(int signo) {
                 }
                 write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
                 kill(clients[i].pid, SIGUSR2);
+            } // chat-dev4 : /LIST all : 모든 채팅방 리스트를 출력함, all 이 아닐 경우 경고 문구 출력
+            else if(strcmp(ch, "LIST") == 0){
+                char sendMsg[BUFSIZ * 10];
+                
+                if(strcmp(str, "all") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/LIST ***** 모든 채팅 채널방 리스트를 출력합니다. ***** \n");
+                    for(int room_i = 0; room_i < MAX_ROOMS; room_i++){
+                        char tempBuf[BUFSIZ * 2];
+                        // 활성화된 방의 리스트를 모두 모아서 출력한다.
+                        if(rooms[room_i].is_active){
+                            snprintf(tempBuf, sizeof(tempBuf), "[%s] 채널\n", rooms[room_i].roomName);
+                            strcat(sendMsg, tempBuf);
+                        }
+                    }
+                } else {
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/LIST 채널방 리스트 출력 명령을 잘못 입력했습니다.");
+                }
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
             }
             
             // 추후 /join, /leave 등 다른 명령어 처리 로직 추가 예정
