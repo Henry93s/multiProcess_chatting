@@ -873,3 +873,101 @@ test: 2
 [2025-06-26 21:31:47] [INFO] : [자식 pid 27587] SIGUSR2 핸들러 발생
 [2025-06-26 21:31:51] [WARNING] : [자식 index 0, pid 27587] 클라이언트 연결 종료가 감지되어 해당 클라이언트 연결을 종료합니다.
 [2025-06-26 21:31:51] [INFO] : 클라이언트 0 (pid: 27587, nick: asdkjflkasdjfklasjdf) 접속 종료. 자원 회수 완료.
+
+[2025-06-26 21:49:34] [INFO] : 서버가 5101 번 포트에서 대기하고 있습니다......
+
+[2025-06-26 21:49:36] [INFO] : 클라이언트 연결됨: 127.0.0.1
+[2025-06-26 21:49:38] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /NICK asdklfjaskldfj
+[2025-06-26 21:49:36] [INFO] : 클라이언트 연결됨: 127.0.0.1
+[2025-06-26 21:49:38] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:49:38] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /NICK asdklfjaskldfj
+[2025-06-26 21:49:38] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:49:40] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG asdklfjaskldfj:aslkdjflkasdjf
+[2025-06-26 21:49:40] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:49:40] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG asdklfjaskldfj:aslkdjflkasdjf
+[2025-06-26 21:49:40] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:50:43] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /LEAVE SDF
+[2025-06-26 21:50:43] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:50:43] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /LEAVE SDF
+[2025-06-26 21:50:43] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:50:48] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /LEAVE lobby
+[2025-06-26 21:50:48] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:50:48] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /LEAVE lobby
+[2025-06-26 21:50:48] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:50:50] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG asdklfjaskldfj:sjdlkfjsdklf
+[2025-06-26 21:50:50] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:50:50] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG asdklfjaskldfj:sjdlkfjsdklf
+[2025-06-26 21:50:50] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:50:52] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG asdklfjaskldfj:lksjdflksdjaklfdjg
+[2025-06-26 21:50:52] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:50:52] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG asdklfjaskldfj:lksjdflksdjaklfdjg
+[2025-06-26 21:50:52] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:51:12] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /ADD sdfsdasg
+[2025-06-26 21:51:12] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:51:12] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /ADD sdfsdasg
+[2025-06-26 21:51:12] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:51:13] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG asdklfjaskldfj:sdlkjflksd
+[2025-06-26 21:51:13] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:51:13] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG asdklfjaskldfj:sdlkjflksd
+[2025-06-26 21:51:13] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:51:20] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /ADD ASDGKHJSAHDG
+[2025-06-26 21:51:20] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:51:20] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /ADD ASDGKHJSAHDG
+[2025-06-26 21:51:20] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:51:41] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /ADD ASDGKHJSAHDG
+[2025-06-26 21:51:41] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:51:41] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /ADD ASDGKHJSAHDG
+[2025-06-26 21:51:41] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:51:49] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /LEAVE lobby
+[2025-06-26 21:51:49] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:51:49] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /LEAVE lobby
+[2025-06-26 21:51:49] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:51:50] [INFO] : [자식 index 0, pid : 28052] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG asdklfjaskldfj:ksldfjklsdf
+[2025-06-26 21:51:50] [INFO] : [부모 pid 28050] SIGUSR1 핸들러 발생
+[2025-06-26 21:51:50] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG asdklfjaskldfj:ksldfjklsdf
+[2025-06-26 21:51:50] [INFO] : [자식 pid 28052] SIGUSR2 핸들러 발생
+[2025-06-26 21:51:51] [WARNING] : [자식 index 0, pid 28052] 클라이언트 연결 종료가 감지되어 해당 클라이언트 연결을 종료합니다.
+[2025-06-26 21:51:51] [INFO] : 클라이언트 0 (pid: 28052, nick: asdklfjaskldfj) 접속 종료. 자원 회수 완료.
+
+[2025-06-26 21:55:00] [INFO] : [부모 pid 28050] 서버 종료 시그널 수신 : 모든 자식 종료 중 ...
+[2025-06-26 21:55:00] [INFO] : [부모 pid 28050] 서버 종료 완료. 자원 회수 완료.
+[2025-06-26 22:17:44] [INFO] : 서버가 5101 번 포트에서 대기하고 있습니다......
+
+[2025-06-26 22:17:48] [INFO] : 클라이언트 연결됨: 127.0.0.1
+[2025-06-26 22:17:50] [INFO] : [자식 index 0, pid : 1840] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /NICK laksdjflkasdjfkl
+[2025-06-26 22:17:48] [INFO] : 클라이언트 연결됨: 127.0.0.1
+[2025-06-26 22:17:50] [INFO] : [부모 pid 1838] SIGUSR1 핸들러 발생
+[2025-06-26 22:17:50] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /NICK laksdjflkasdjfkl
+[2025-06-26 22:17:50] [INFO] : [자식 pid 1840] SIGUSR2 핸들러 발생
+[2025-06-26 22:17:52] [INFO] : [자식 index 0, pid : 1840] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG laksdjflkasdjfkl:klsdjfklsdj
+[2025-06-26 22:17:52] [INFO] : [부모 pid 1838] SIGUSR1 핸들러 발생
+[2025-06-26 22:17:52] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG laksdjflkasdjfkl:klsdjfklsdj
+[2025-06-26 22:17:52] [INFO] : [자식 pid 1840] SIGUSR2 핸들러 발생
+[2025-06-26 22:17:52] [INFO] : [자식 index 0, pid : 1840] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG laksdjflkasdjfkl:lsdkfjslkdf
+[2025-06-26 22:17:52] [INFO] : [부모 pid 1838] SIGUSR1 핸들러 발생
+[2025-06-26 22:17:52] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG laksdjflkasdjfkl:lsdkfjslkdf
+[2025-06-26 22:17:52] [INFO] : [자식 pid 1840] SIGUSR2 핸들러 발생
+[2025-06-26 22:18:09] [INFO] : 클라이언트 연결됨: 127.0.0.1
+[2025-06-26 22:18:11] [INFO] : [자식 index 1, pid : 1873] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /NICK absdbfklasdbfkl
+[2025-06-26 22:18:09] [INFO] : 클라이언트 연결됨: 127.0.0.1
+[2025-06-26 22:18:11] [INFO] : [부모 pid 1838] SIGUSR1 핸들러 발생
+[2025-06-26 22:18:11] [INFO] : SIGUSR1 핸들러: 클라이언트 index 1 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /NICK absdbfklasdbfkl
+[2025-06-26 22:18:11] [INFO] : [자식 pid 1873] SIGUSR2 핸들러 발생
+[2025-06-26 22:18:15] [INFO] : [자식 index 1, pid : 1873] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG absdbfklasdbfkl:askldjflaks
+[2025-06-26 22:18:15] [INFO] : [부모 pid 1838] SIGUSR1 핸들러 발생
+[2025-06-26 22:18:15] [INFO] : SIGUSR1 핸들러: 클라이언트 index 1 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG absdbfklasdbfkl:askldjflaks
+[2025-06-26 22:18:15] [INFO] : [자식 pid 1873] SIGUSR2 핸들러 발생
+[2025-06-26 22:18:15] [INFO] : [자식 pid 1840] SIGUSR2 핸들러 발생
+[2025-06-26 22:18:17] [INFO] : [자식 index 0, pid : 1840] 서버의 부모 프로세스에게 메시지(데이터) 작성 SIGNAL 알림: /MSG laksdjflkasdjfkl:asdfs
+[2025-06-26 22:18:17] [INFO] : [부모 pid 1838] SIGUSR1 핸들러 발생
+[2025-06-26 22:18:17] [INFO] : SIGUSR1 핸들러: 클라이언트 index 0 로부터 메시지 수신을 담당 서버 자식프로세스로부터 받음 : /MSG laksdjflkasdjfkl:asdfs
+[2025-06-26 22:18:17] [INFO] : [자식 pid 1840] SIGUSR2 핸들러 발생
+[2025-06-26 22:18:17] [INFO] : [자식 pid 1873] SIGUSR2 핸들러 발생
+[2025-06-26 22:18:21] [WARNING] : [자식 index 0, pid 1840] 클라이언트 연결 종료가 감지되어 해당 클라이언트 연결을 종료합니다.
+[2025-06-26 22:18:21] [INFO] : 클라이언트 0 (pid: 1840, nick: laksdjflkasdjfkl) 접속 종료. 자원 회수 완료.
+
+[2025-06-26 22:18:22] [WARNING] : [자식 index 1, pid 1873] 클라이언트 연결 종료가 감지되어 해당 클라이언트 연결을 종료합니다.
+[2025-06-26 22:18:22] [INFO] : 클라이언트 1 (pid: 1873, nick: absdbfklasdbfkl) 접속 종료. 자원 회수 완료.
+
+[2025-06-26 22:18:58] [INFO] : [부모 pid 1838] 서버 종료 시그널 수신 : 모든 자식 종료 중 ...
+[2025-06-26 22:18:58] [INFO] : [부모 pid 1838] 서버 종료 완료. 자원 회수 완료.

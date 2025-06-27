@@ -15,26 +15,26 @@
 #define PORT    5101
 #define PENDING_CONN 5
 #define MAX_CLIENTS 30 // 최대 클라이언트 수 30
-#define MAX_ROOMS 5 // 최대 채팅방 수 5
+#define MAX_ROOMS 5 // 최대 채팅 채널 수 5
 
 // chat-dev1 0단계(구조 변경 및 프로토콜 설계)
 // chat-dev1 : 서버 측 데이터 구조 정의 - 클라이언트를 pid 가 아닌 닉네임, 현재 접속한 방 등의 정보로 관리할 구조체 정의
 typedef struct {
     pid_t pid;
-    int client_sock_fd; // 기존 client_sock 배열
+    int client_sock_fd; // sock_fd
     char nickName[50];
     int room_idx; // 현재 접속한 방 index (0 : lobby)
 } ClientData;
 
-// chat-dev1 : 채팅방 데이터 구조 정의
+// chat-dev1 : 채팅 채널 데이터 구조 정의
 typedef struct {
     char roomName[100];
     int is_active; // 1 : 활성화, 0 : 비활성화
 } RoomData;
 
-// chat-dev1 : 서버 측 client 와 채팅방 데이터 구조 struct 전역 변수
+// chat-dev1 : 서버 측 client 와 채팅 채널 데이터 구조 struct 전역 변수
 ClientData clients[MAX_CLIENTS]; // 기존 child_pid, client_sock 배열 통합
-RoomData rooms[MAX_ROOMS]; // 채팅방 배열
+RoomData rooms[MAX_ROOMS]; // 채팅 채널 배열
 
 // 3 -> 4단계: 전역 변수로 pipe, conn_sock, child_pid 정의
 int pipe_parent_to_child[MAX_CLIENTS][2]; // 부모 → 자식 write 기준으로 변수 이름 정의 
@@ -136,7 +136,7 @@ void sigusr1_handler(int signo) {
                 write(pipe_parent_to_child[i][1], response, strlen(response));
                 kill(clients[i].pid, SIGUSR2); // 해당 자식 프로세스에 SIGUSR2 시그널 알림
             } else if(strcmp(ch, "MSG") == 0){
-                // 같은 채팅방에만 전송하기 위해서 사용할 임시 변수 sender_room
+                // 같은 채팅 채널에만 전송하기 위해서 사용할 임시 변수 sender_room
                 int sender_room = clients[i].room_idx;
                 
                 // 브로드캐스트할 전체 채팅 메시지
@@ -150,7 +150,7 @@ void sigusr1_handler(int signo) {
                 }
                 char broadcast_msg[BUFSIZ * 3];
                 
-                // chat-dev2 : 채팅을 보낼 때 무슨 채팅방에서 보냈는지 를 닉네임 앞에 추가함
+                // chat-dev2 : 채팅을 보낼 때 무슨 채팅 채널에서 보냈는지 를 닉네임 앞에 추가함
                 char WhereIsRoomAndNickname[BUFSIZ * 2];
                 snprintf(WhereIsRoomAndNickname, sizeof(WhereIsRoomAndNickname), "%s 채널(%d) ", rooms[sender_room].roomName, sender_room);
                 strcat(WhereIsRoomAndNickname, sendnickName);
@@ -165,83 +165,65 @@ void sigusr1_handler(int signo) {
                         kill(clients[j].pid, SIGUSR2);
                     }
                 }
-                // chat-dev2 : 채팅방 개설 명령 추가
-                // 서버에서 체크 사항 : 채팅방 최대 수용량 체크, 채팅방 이름 중복 여부 확인 후  
+                // chat-dev2 : 채팅 채널 개설 명령 추가
+                // 서버에서 체크 사항 : 채팅 채널 최대 수용량 체크, 채팅 채널 이름 중복 여부 확인 후  
                 // 허용 가능할 때 roomData 의 is_active 를 활성화시키고, 요청한 클라이언트의 clientData 의 room_idx 를 해당 room 으로 변경한다. 
             } else if(strcmp(ch, "ADD") == 0){
                 // chat-dev2 : 클라이언트의 부모 프로세스로 부터 받은 문자열을 받고 
                 // 명령어에 따라 문자열 파싱 + 파이프에 write + 현재(서버)의 부모 프로세스로 시그널 알림 동작이 발생함
-                // chat-dev2 : /add 채팅방 추가
-                // 서버에서 체크 사항 : 채팅방 최대 수용량 체크, 채팅방 이름 중복 여부 확인 후  
+                // chat-dev2 : /add 채팅 채널 추가
+                // 서버에서 체크 사항 : 채팅 채널 최대 수용량 체크, 채팅 채널 이름 중복 여부 확인 후  
                 // 허용 가능할 때 roomData 의 is_active 를 활성화시키고, 요청한 클라이언트의 clientData 의 room_idx 를 해당 room 으로 변경한다. 
                 
-                char tempMsg[BUFSIZ];
-                int is_valid = 0; // 채팅방 개설 가능 여부 변수
+                char sendMsg[500];
+                int is_valid = 0; // 채팅 채널 개설 가능 여부 변수
+                int is_duplicate = 0;
 
-                // 채팅방 최대 수용량 및 채팅방 이름 중복 여부 확인
+                // 채팅 채널 최대 수용량 및 채팅 채널 이름 중복 여부 확인
                 int k;
                 for (k = 0; k < MAX_ROOMS; k++){
                     if(strcmp(rooms[k].roomName, str) == 0){
                         // 중복 처리
-                        snprintf(tempMsg, sizeof(tempMsg), "/ADD %s", "DUP");  
+                        is_duplicate = 1;
                         break;
                     }
                     if(rooms[k].is_active == 0){
-                        // is_active = 0 이므로 채팅방 활성화 가능
+                        // 허용 가능
+                        // is_active = 0 이므로 채팅 채널 활성화 가능
                         is_valid = 1;
-                        snprintf(tempMsg, sizeof(tempMsg), "/ADD %d%s", k, str);
+                        rooms[k].is_active = 1;
+                        strcpy(rooms[k].roomName, str); // 활성화한 채팅 채널 이름 변경
+                        clients[i].room_idx = k; // 클라이언트의 채팅 채널 위치 변경
+
+                        snprintf(sendMsg, sizeof(sendMsg), "/ADD %d 번째 %s 채팅 채널을 만들고 입장했습니다.", k, rooms[k].roomName);
                         break;
                     }
                 }
 
-                // 활성화된 채팅방 없음 (모두 is_active = 1)
-                if(k == MAX_ROOMS && is_valid == 0){
-                    snprintf(tempMsg, sizeof(tempMsg), "/ADD %s", "INVALID");
+                // 활성화된 채팅 채널 없음 (모두 is_active = 1)
+                if(is_duplicate){
+                    snprintf(sendMsg, sizeof(sendMsg), "/ADD %s", "중복된 채팅 채널 이름입니다.\n");
                 }
-
-                ///
-                char ch2[10], str2[BUFSIZ + 12 + 50];
-                char* space = strchr(tempMsg, ' ');
-                if (space != NULL) {
-                    sscanf(tempMsg, "/%s", ch2);
-                    strcpy(str2, space + 1);  // 공백 이후 문자열 복사
-                }
-
-                char sendMsg[500];
-                if(strcmp(str2, "DUP") == 0){
-                    snprintf(sendMsg, sizeof(sendMsg), "/ADD %s", "중복된 채팅방 이름입니다.\n");
-                } else if(strcmp(str2, "INVALID") == 0){
-                    snprintf(sendMsg, sizeof(sendMsg), "/ADD %s", "채팅방 최대 수용량을 초과하였습니다.\n");
-                } else {
-                    // 허용 가능
-                    int inputRoomNum;
-                    char inputRoomName[100];
-                    
-                    // 숫자와 문자열 분리
-                    sscanf(str2, "%d%s", &inputRoomNum, inputRoomName);
-                    rooms[inputRoomNum].is_active = 1; // 채팅방 활성화함
-                    strcpy(rooms[inputRoomNum].roomName, inputRoomName); // 활성화한 채팅방 이름 변경
-                    clients[i].room_idx = inputRoomNum; // 클라이언트의 채팅방 위치 변경
-
-                    snprintf(sendMsg, sizeof(sendMsg), "/ADD %d 번째 %s 채팅방을 만들고 입장했습니다.", inputRoomNum, inputRoomName);
+                else if(is_valid == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "/ADD %s", "채팅 채널 최대 수용량을 초과하였습니다.\n");
                 }
                 
                 // 서버 부모 프로세스에서 처리(컨트롤) 후 결과를 서버 자식 프로세스(해당 클라이언트 담당) 에게 전달할 파이프에 작성
                 write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
                 // 후 서버 자식 프로세스(해당 클라이언트 담당 프로세스)에게 시그널 알림
                 kill(clients[i].pid, SIGUSR2); 
-            } // chat-dev3 : /LEAVE 명령어. 현재 클라이언트가 로비 채널이 아닌 채팅방에 있을 때만, 로비 채널로 이동 시켜 준다.
+            } // chat-dev3 : /LEAVE 명령어. 현재 클라이언트가 로비 채널이 아닌 채팅 채널에 있을 때만, 로비 채널로 이동 시켜 준다.
             else if(strcmp(ch, "LEAVE") == 0){
                 char sendMsg[500];
 
                 // 이미 로비에서 Leave 명령어 수행 시 동작하지 않음
                 if(strcmp(str, "lobby") == 0){
                     if(clients[i].room_idx == 0){
-                        snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 이미 로비(Lobby) 채널에 있는 유저입니다.");    
+                        snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 이미 로비(lobby) 채널에 있는 유저입니다.");    
                     } else {
-                        // 로비가 아닌 다른 채팅방에 있는 클라이언트일 경우 로비 채널로 이동
+                        // 로비가 아닌 다른 채팅 채널에 있는 클라이언트일 경우 로비 채널로 이동
                         clients[i].room_idx = 0;
-                        snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 로비(Lobby) 채널로 이동합니다.");
+                        snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 로비(lobby) 채널로 이동합니다.");
                     }
                 } else {
                     snprintf(sendMsg, sizeof(sendMsg), "%s", "/LEAVE 잘못된 명령 문구를 입력했습니다.");    
@@ -249,7 +231,137 @@ void sigusr1_handler(int signo) {
                 
                 write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
                 kill(clients[i].pid, SIGUSR2);
+            } // chat-dev4 : /RM 명령어. 로비 채널이 아닌 채팅 채널에 있을 때만, 로비 채널로 이동 시켜 줌
+            else if(strcmp(ch, "RM") == 0){
+                char sendMsg[BUFSIZ + 100];
+
+                if(strcmp(str, "lobby") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/RM 로비(lobby) 채널은 삭제할 수 없습니다.");
+                } else {
+                    int is_valid = 0;
+                    // 로비가 아닌 다른 채팅 채널의 이름일 경우 해당 채팅 채널을 지우고
+                    int rm_i;
+                    for(rm_i = 0; rm_i < MAX_ROOMS; rm_i++){
+                        if(rooms[rm_i].is_active && strcmp(rooms[rm_i].roomName, str) == 0){
+                            is_valid = 1;
+                            rooms[rm_i].is_active = 0;
+                            break;
+                        }
+                    }
+                    // 해당 채팅 채널에 있던 유저들을 로비로 내보낸다. 
+                    if(is_valid){
+                        int is_findUser = 0;
+                        // 채팅 채널에 포함된 유저들을 찾고 로비로 내보냄
+                        for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
+                            if(clients[client_i].room_idx == rm_i){
+                                is_findUser = 1;
+                                clients[client_i].room_idx = 0;
+                            }
+                        }
+
+                        if(is_findUser){ // 삭제된 채팅 채널에 유저가 있었을 때의 처리
+                            snprintf(sendMsg, sizeof(sendMsg), "/RM %s 채널이 삭제되었으며, 해당 채팅 채널 유저는 로비로 이동됩니다.", rooms[rm_i].roomName);
+                        } else { // 삭제된 채팅 채널에 유저가 없었을 때의 처리
+                            snprintf(sendMsg, sizeof(sendMsg), "/RM %s 채널이 삭제되었으며, 해당 채팅 채널 에는 유저가 없었습니다.", rooms[rm_i].roomName);
+                        }
+                        // roomName 문자열 초기화
+                        memset(rooms[rm_i].roomName, 0, sizeof(rooms[rm_i].roomName));
+                    } else { // 삭제하려는 채팅 채널이 없음(입력한 채팅 채널 이름이 잘못됨)
+                        snprintf(sendMsg, sizeof(sendMsg), "/RM %s 이름을 가진 채팅 채널이 없습니다.", str);
+                    }
+                }
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
             }
+            // chat-dev4 : /USERS all - 현재 채팅 서버에 접속한 모든 클라이언트 유저 정보(해당 유저가 접속한 채팅방, 유저 이름) 를 출력
+            //             /USERS 채팅방이름 - 해당 채팅 채널방에 속해 있는 모든 클라이언트 유저 정보를 출력
+            else if(strcmp(ch, "USER") == 0){
+                char sendMsg[1024 * 5];
+
+                // 현재 채팅 서버에 접속한 모든 클라이언트 유저 정보를 파이프에 작성하고 자식 프로세스에 시그널 alarm
+                if(strcmp(str, "all") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/USER 전체 유저 정보\n");
+                    for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
+                        if(clients[client_i].pid > 0){
+                            char tempBuf[BUFSIZ * 2];
+                            snprintf(tempBuf, sizeof(tempBuf), "<USER : %s>   [Channel : %s]\n", clients[client_i].nickName, rooms[clients[client_i].room_idx].roomName);
+                            strcat(sendMsg, tempBuf);
+                        }
+                    }
+                } // 특정 채팅방의 유저 정보를 출력 (없을 경우 그에 따른 문구 출력)
+                else {
+                    int is_empty = 1;
+                    for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
+                        char tempBuf[BUFSIZ * 2];
+                        if(clients[client_i].pid > 0 && strcmp(rooms[clients[client_i].room_idx].roomName, str) == 0) {
+                            if(is_empty){
+                                is_empty = 0;
+                                snprintf(sendMsg, sizeof(sendMsg), "/USER 채널 [%s] 유저 정보\n", str);
+                            }
+                            snprintf(tempBuf, sizeof(tempBuf), "<USER : %s>   [Channel : %s]\n", clients[client_i].nickName, rooms[clients[client_i].room_idx].roomName);
+                            strcat(sendMsg, tempBuf);
+                        }
+                    }
+                    if(is_empty){
+                        snprintf(sendMsg, sizeof(sendMsg), "/USER [%s] 채팅 채널은 존재하지 않거나, 인원이 없는 채팅 채널방입니다.", str);
+                    }
+                }
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
+            } // chat-dev4 : /LIST all : 모든 채팅방 리스트를 출력함, all 이 아닐 경우 경고 문구 출력
+            else if(strcmp(ch, "LIST") == 0){
+                char sendMsg[BUFSIZ * 10];
+                
+                if(strcmp(str, "all") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/LIST ***** 모든 채팅 채널방 리스트를 출력합니다. ***** \n");
+                    for(int room_i = 0; room_i < MAX_ROOMS; room_i++){
+                        char tempBuf[BUFSIZ * 2];
+                        // 활성화된 방의 리스트를 모두 모아서 출력한다.
+                        if(rooms[room_i].is_active){
+                            snprintf(tempBuf, sizeof(tempBuf), "[%s] 채널\n", rooms[room_i].roomName);
+                            strcat(sendMsg, tempBuf);
+                        }
+                    }
+                } else {
+                    snprintf(sendMsg, sizeof(sendMsg), "%s", "/LIST 채널방 리스트 출력 명령을 잘못 입력했습니다.");
+                }
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
+            }
+            // chat-dev4 : /JOIN 채팅방이름 : 클라이언트가 기존 채팅 채널에서 새 채널로 이동한다.
+            // 단, 기존과 동일한 채널을 선택하거나 없는 채널방이름을 입력했을 땐 그에 따른 주의 문구를 출력함
+            else if(strcmp(ch, "JOIN") == 0){
+                char sendMsg[BUFSIZ];
+
+                // 목적지 채널은 활성화되었지만, 클라이언트가 이미 목적지 채팅채널에 있을 때 처리
+                if(rooms[clients[i].room_idx].is_active && 
+                    strcmp(rooms[clients[i].room_idx].roomName, str) == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "/JOIN 이미 [%s] 채팅 채널에 있습니다.", str);
+                } 
+                // 목적지 채널도 활성화되어있고, 클라이언트가 현재 있는 채널과 목적지 채널이 다를 때(정상)
+                else if(rooms[clients[i].room_idx].is_active && 
+                    strcmp(rooms[clients[i].room_idx].roomName, str) != 0){
+                    int is_notFound = 1;
+                    snprintf(sendMsg, sizeof(sendMsg), "/JOIN [%s] 채팅 채널에 참가했습니다.", str);
+                    // client data 변경 진행 (채팅 채널 이동)
+                    for(int room_i = 0; room_i < MAX_ROOMS; room_i++){
+                        if(rooms[room_i].is_active && strcmp(rooms[room_i].roomName, str) == 0){
+                            // 채널 이동
+                            clients[i].room_idx = room_i;
+                            is_notFound = 0;
+                            break;
+                        }
+                    }
+                    if(is_notFound){ // 목적지 채널이 비활성화이거나, 입력한 채널명을 가진 채팅채널이 없을 때 처리
+                        snprintf(sendMsg, sizeof(sendMsg), "/JOIN [%s] 채팅 채널이 비활성화이거나, 해당 채팅 채널이 존재하지 않습니다.", str);
+                    }
+                } else { 
+                    snprintf(sendMsg, sizeof(sendMsg), "/JOIN [%s] 잘못된 채팅 채널명을 입력했습니다.", str);
+                }
+
+                write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                kill(clients[i].pid, SIGUSR2);
+            } 
             
             // 추후 /join, /leave 등 다른 명령어 처리 로직 추가 예정
         }
@@ -440,7 +552,7 @@ int main(int argc, char** argv) {
     // 데이터 구조 초기화
     memset(clients, 0, sizeof(clients));
     memset(rooms, 0, sizeof(rooms));
-    strcpy(rooms[0].roomName, "Lobby");
+    strcpy(rooms[0].roomName, "lobby");
     rooms[0].is_active = 1;
 
     // 7 단계 : 서버 데몬화 처리
