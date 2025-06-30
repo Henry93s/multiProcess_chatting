@@ -47,7 +47,7 @@ int child_index = -1; // 자식 프로세스 전용 인덱스
 // conn_fd : 클라이언트와 연결이 성공된 직후 사용되는 소켓 -> accept 성공 후 생성되고 자식에 넘기고 부모는 닫음
 // 6 단계 : graceful_shutdown 을 위해 main 지역 변수에서 전역 변수로 이동
 int listen_fd, conn_fd;
-// 7 단계 : 서버 데몬화 처리 및 로그 출력을 파일로 리디렉션
+// 7 단계 : 서버 데몬화 처리 및 로그 출력을 파일로 리디렉션을 위한 로그 파일 디스크립터
 int file_fd;
 
 // 7단계 : 로그 출력을 위해서 시간을 [YYYY-MM-DD HH:MM:SS] 형식으로 문자열을 생성하는 함수
@@ -361,9 +361,69 @@ void sigusr1_handler(int signo) {
 
                 write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
                 kill(clients[i].pid, SIGUSR2);
-            } 
-            
-            // 추후 /join, /leave 등 다른 명령어 처리 로직 추가 예정
+            } // chat-dev5 : /WHISPER 사용자이름 메시지 - 서버에 접속한 사용자에게만 귓속말 전달
+            else if(strcmp(ch, "WHISPER") == 0){
+                // 같은 채팅 채널에만 전송하기 위해서 사용할 임시 변수 sender_room
+                int sender_room = clients[i].room_idx;
+                
+                // 귓속말 메시지 파싱 
+                char fromnickName[51];
+                char toNickNameAndmsg[BUFSIZ];
+                char toNickName[51];
+                char msg[BUFSIZ];
+                char* colon = strchr(str, ':');
+                if (colon != NULL) {
+                    *colon = '\0'; // ':'를 문자열 종료로 바꿈
+                    strcpy(fromnickName, str);
+                    strcpy(toNickNameAndmsg, colon + 1);
+                }
+                colon = strchr(toNickNameAndmsg, ' ');
+                if(colon != NULL){
+                    *colon = '\0'; // ' ' 을 문자열 종료로 바꿈
+                    strcpy(toNickName, toNickNameAndmsg);
+                    strcpy(msg, colon + 1);
+
+                    // whisper 하려는 toNickName 이 현재 접속 유저 중에 있는지 find
+                    int is_alive = 0;
+                    int find_user = -1;
+                    for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
+                        if(clients[client_i].pid > 0 && strcmp(clients[client_i].nickName, toNickName) == 0 \
+                        && strcmp(clients[i].nickName, toNickName) != 0) {
+                            is_alive = 1;
+                            find_user = client_i; // 귓속말 대상 클라이언트의 clients 인덱스 저장
+                        } 
+                    }
+
+                    char sendMsg[BUFSIZ * 3];
+                    // 귓속말을 하려는 클라이언트가 접속 중이고(pid > 0), 귓속말 요청 클라이언트 닉네임과 실제 접속 중인 닉네임이 일치할 경우(정상)
+                    if(is_alive && find_user != -1){
+                        // chat-dev2 : 채팅을 보낼 때 무슨 채팅 채널에서 보냈는지 를 닉네임 앞에 추가함
+                        // 보낼 메시지를 정돈하여 sendMsg 에 반영
+                        char WhereIsRoomAndNickname[BUFSIZ * 2];
+                        snprintf(WhereIsRoomAndNickname, sizeof(WhereIsRoomAndNickname), "[귓속말] - %s 채널(%d) ", rooms[sender_room].roomName, sender_room);
+                        strcat(WhereIsRoomAndNickname, fromnickName);
+
+                        snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", WhereIsRoomAndNickname, msg);
+                        // 귓속말 수신 대상 클라이언트를 관리하는 파이프에 데이터를 작성하고
+                        write(pipe_parent_to_child[find_user][1], sendMsg, strlen(sendMsg));
+                        // 귓속말 수신 대상 클라이언트를 관리하는 자식프로세스에 시그널 알림
+                        kill(clients[find_user].pid, SIGUSR2);
+                        // 귓속말을 보낸 클라이언트에도 파이프에 데이터를 작성 + 자식프로세스에 시그널 알림을 통해서 대화를 주고받도록 함
+                        write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                        kill(clients[i].pid, SIGUSR2);
+                    } else { // 귓속말을 받을 클라이언트가 없음(수신 대상 없을 때)
+                        snprintf(sendMsg, sizeof(sendMsg), "/WHISPER To_%s: %s", toNickName, "사용자가 접속 중인 닉네임을 정확하게 입력하지 않거나 자기 자신한테는 귓속말을 할 수 없습니다.");
+                        // 귓속말을 받을 대상 클라이언트가 없을 때는 귓속말을 보낸 클라이언트 파이프에 작성하고 자식 스트레스에 시그널 알림
+                        write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                        kill(clients[i].pid, SIGUSR2);
+                    }
+                } else { // 귓속말을 받을 대상 닉네임을 명령어 사용 방법(/WHISPER 대상닉네임 메시지) 대로 입력하지 못함. (대상닉네임과 메시지 사이의 공백이 없음)
+                    char sendMsg[BUFSIZ * 3];
+                    snprintf(sendMsg, sizeof(sendMsg), "/WHISPER From_%s: %s", fromnickName, "명령어 사용 방법(/WHISPER 대상닉네임 메시지) 대로 입력했는지 다시 확인해주세요.");
+                    write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                    kill(clients[i].pid, SIGUSR2);
+                }
+            }
         }
     }
 }
@@ -722,11 +782,12 @@ int main(int argc, char** argv) {
             // 6 단계 : 새로 찾은 인덱스를 자신의 인덱스(자식)으로 사용
             child_index = new_client_idx; // 자식 전용 인덱스 설정
 
-            // 파이프 정리
-            close(pipe_child_to_parent[child_index][0]); // 부모는 pipe_child_to_parent 파이프에서 write 만 유지
-            close(pipe_parent_to_child[child_index][1]); // 부모는 pipe_parent_to_child 파이프에서 read 만 유지
-
-            // 자식이 읽는 파이프를 non-blocking 으로 설정 (부모 write 가 막히지 않도록 하기 위함)
+            // 파이프 정리 (250630 주석 수정)
+            // 자식 프로세스는 pipe_child_to_parent(write 기준) 파이프에서 write 만 유지
+            close(pipe_child_to_parent[child_index][0]); 
+            // 자식 프로세스는 pipe_parent_to_child(write 기준) 파이프에서 read 만 유지
+            close(pipe_parent_to_child[child_index][1]); 
+            // 자식이 부모프로세스로부터 읽는 파이프를 non-blocking 으로 설정 (부모 write 가 막히지 않도록 하기 위함)
             int flags = fcntl(pipe_parent_to_child[child_index][0], F_GETFL, 0);
             fcntl(pipe_parent_to_child[child_index][0], F_SETFL, flags | O_NONBLOCK);
             
@@ -770,7 +831,7 @@ int main(int argc, char** argv) {
                 buf[n] = '\0'; // 문자열 끝 처리
 
                 // 자식 프로세스에서 서버 부모 프로세스에 데이터를 파이프 작성으로 통해서 전달하도록 함
-                write(pipe_child_to_parent[child_index][1], buf, n); // 3->4단계: 자식 → 부모로 write
+                write(pipe_child_to_parent[child_index][1], buf, n); // 3->4단계: 자식 → 부모로 write 하기 위한 파이프 작성
                 // 7단계 : LOG Redirection
                 char logMsg[BUFSIZ * 2 + 32];
                 char errMsg[BUFSIZ * 2];
@@ -792,10 +853,12 @@ int main(int argc, char** argv) {
             strcpy(clients[new_client_idx].nickName, "GUEST"); // 임시 닉네임
             clients[new_client_idx].room_idx = 0; // 기본적으로 로비에 참가
 
-            close(pipe_child_to_parent[new_client_idx][1]); // 부모는 child_to_parent 파이프에서 read 만 유지
-            close(pipe_parent_to_child[new_client_idx][0]); // 부모는 parent_to_child 파이프에서 write 만 유지
-
-            // 부모가 읽는 파이프를 non-blocking 모드로 설정해 핸들러가 멈추지 않도록 함
+            // 파이프 정리 (250630 주석 수정)
+            // 부모는 child_to_parent(write 기준) 파이프에서 read 만 유지
+            close(pipe_child_to_parent[new_client_idx][1]); 
+            // 부모는 parent_to_child(write 기준) 파이프에서 write 만 유지
+            close(pipe_parent_to_child[new_client_idx][0]); 
+            // 부모가 자식프로세스로부터 읽는 파이프를 non-blocking 모드로 설정해 핸들러가 멈추지 않도록 함
             int flags = fcntl(pipe_child_to_parent[new_client_idx][0], F_GETFL, 0);
             fcntl(pipe_child_to_parent[new_client_idx][0], F_SETFL, flags | O_NONBLOCK);
 
@@ -807,6 +870,6 @@ int main(int argc, char** argv) {
     }
 
     close(file_fd); // 로그 파일 디스크립터 닫음
-    close(listen_fd);
+    close(listen_fd); // listening 파일 디스크립터를 닫음
     return 0;
 }

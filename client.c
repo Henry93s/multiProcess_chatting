@@ -8,6 +8,15 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
+// chat-dev5 : ANSI 이스케이프 코드를 사용하여 글자에 색상을 넣기 위한 색 DEFINE
+#define COLOR_RED     "\x1b[31m"
+#define COLOR_GREEN   "\x1b[32m"
+#define COLOR_YELLOW  "\x1b[33m"
+#define COLOR_BLUE    "\x1b[34m"
+#define COLOR_MAGENTA "\x1b[35m"
+#define COLOR_CYAN    "\x1b[36m"
+#define COLOR_RESET   "\x1b[0m"
+
 #define PORT    5101
 
 int sockfd; // 소켓 파일 디스크립터
@@ -15,6 +24,14 @@ char nickname[51]; // 닉네임
 
 // 0625 구조 수정 : 전역 변수로 자식 -> 부모 데이터 파이프 선언
 int pipe_child_to_parent[2];
+
+// chat-dev5 : ANSI 이스케이프 코드를 사용하여 필요 시 화면 clear 기능을 사용하도록 함
+// 위의 선언없이 extern inline void clrscr(void)로 선언
+inline void clrscr(void);		// C99, C11에 대응하기 위해서 사용
+void clrscr(void)				
+{
+    write(1, "\033[1;1H\033[2J", 10);		// ANSI escape 코드로 화면 지우기
+}
 
 // 6 단계 : 클라이언트에서 fork된 자식(수신용) 프로세스가 종료되었을 때 부모가 기다리지 않아서 발생하는 좀비 프로세스 방지 
 void handle_sigchld(int signo) {
@@ -74,6 +91,7 @@ void sigusr1_handler(int signo){
         // client 자식으로부터 받은 버퍼 메시지 문자열 분리
         // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
         // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+        // chat-dev5 : /WHISPER 사용자이름 - 서버에 접속한 사용자에게만 귓속말 전달
         char* space = strchr(buf, ' ');
         if (space != NULL) {
             sscanf(buf, "/%s", ch);
@@ -83,7 +101,8 @@ void sigusr1_handler(int signo){
         if(ch == NULL){
             return;
         }
-        if(strcmp(ch, "MSG") == 0){
+        // chat-dev5 : /WHISPER 사용자이름 - 서버에 접속한 사용자에게만 귓속말 전달
+        if(strcmp(ch, "MSG") == 0 || strcmp(ch, "WHISPER") == 0){
             char nickName[51];
             char msg[BUFSIZ];
 
@@ -98,7 +117,11 @@ void sigusr1_handler(int signo){
                 // 서버로 보낼 메시지 프로토콜 생성
                 char sendMsg[BUFSIZ + 12 + 50];
                 // 서버에 보낼 문자열 결합
-                snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, msg);
+                if(strcmp(ch, "MSG") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, msg);
+                } else if(strcmp(ch, "WHISPER") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", nickname, msg);
+                }
                 
                 // 파이프에 있는 문자열을 서버로 보냄
                 write(sockfd, sendMsg, strlen(sendMsg));
@@ -117,6 +140,7 @@ void process_server_message(char *buf) {
     // 서버로부터 받은 버퍼 문자열 분리
     // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
     // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+    // chat-dev5 : /WHISPER 사용자이름 - 서버에 접속한 사용자에게만 귓속말 전달
     char* space = strchr(buf, ' ');
     if (space != NULL) {
         sscanf(buf, "/%s", ch);
@@ -127,7 +151,7 @@ void process_server_message(char *buf) {
         return;
     }
 
-    if (strcmp(ch, "MSG") == 0) {
+    if (strcmp(ch, "MSG") == 0 || strcmp(ch, "WHISPER") == 0) {
         char nickName[51];
         char msg[BUFSIZ];
 
@@ -139,8 +163,13 @@ void process_server_message(char *buf) {
             strcpy(nickName, str);
             strcpy(msg, colon + 1);
 
-            // 메시지 출력
-            printf("\n[%s] >>> %s\n", nickName, msg);
+            // chat-dev5 : 귓속말일 경우 YELLOW 색 출력하고 색 RESET
+            if(strcmp(ch, "WHISPER") == 0){
+                printf(COLOR_YELLOW "\n[%s] >>> %s\n" COLOR_RESET, nickName, msg);
+            } else {
+                // 메시지 출력
+                printf("\n[%s] >>> %s\n", nickName, msg);
+            }
             fflush(stdout);  // 입력줄 깨지지 않도록
         } 
     } // chat-dev2 : 서버로 부터 채팅방 개설 요청에 대한 결과를 받고, 이를 클라이언트에 처리 결과를 알림
@@ -148,13 +177,23 @@ void process_server_message(char *buf) {
     // chat-dev4 : /USER all - 서버에 접속한 전체 유저 정보를 출력, /USER 채팅방이름 - 서버의 특정 채팅 채널방에 있는 유저 정보들을 출력
     // chat-dev4 : /LIST all - 서버에 활성화된 채팅채널 목록을 출력함
     // chat-dev4 : /JOIN 채널방이름 - 서버에 활성화된 채팅 채널방으로 이동함
-    else if(strcmp(ch, "ADD") == 0 || strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0 || strcmp(ch, "JOIN") == 0){
+    // chat-dev5 : 각 명령어마다 다른 색으로 ANSI 컬러 적용 후 출력 및 RESET 하도록 함
+    // - ADD, RM : COLOR_CYAN 후 RESET
+    // - LEAVE, JOIN : COLOR_GREEN 후 RESET
+    // - USER, LIST : COLOR_MAGENTA 후 RESET 
+    else if(strcmp(ch, "ADD") == 0 || strcmp(ch, "RM") == 0){
+        clrscr(); // chat-dev5 : ADD 나 RM 시 ANSI 이스케이프 clear 코드 적용
         // 메시지 출력
-        printf("\n%s\n", str);
+        printf(COLOR_CYAN "\n%s\n" COLOR_RESET, str);
+        fflush(stdout);  // 입력줄 깨지지 않도록
+    } else if(strcmp(ch, "LEAVE") == 0 || strcmp(ch, "JOIN") == 0){
+        clrscr(); // ADD 나 RM 시 ANSI 이스케이프 clear 코드 적용
+        printf(COLOR_GREEN "\n%s\n" COLOR_RESET, str);
+        fflush(stdout);  // 입력줄 깨지지 않도록
+    } else if(strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0){
+        printf(COLOR_MAGENTA "\n%s\n" COLOR_RESET, str);
         fflush(stdout);  // 입력줄 깨지지 않도록
     } 
-    // 여기에 다른 서버 응답(/list 응답 등) 처리 로직 추가
-    
 }
 
 int main(int argc, char** argv){
@@ -196,7 +235,7 @@ int main(int argc, char** argv){
         nickname[strcspn(nickname, "\n")] = 0; // 개행 문자 제거
 
         if (strlen(nickname) == 0) {
-            printf("닉네임은 비워둘 수 없습니다.\n");
+            printf(COLOR_RED "닉네임은 비워둘 수 없습니다.\n");
             continue;
         }
         if (strlen(nickname) >= 50){
@@ -246,9 +285,10 @@ int main(int argc, char** argv){
     register_sigaction(SIGCHLD, handle_sigchld);
     
     // 로비 입장
-    printf("--- Chatting Lobby Room ---\n");
+    // chat-dev5 : 처음 채팅 서버 로비 접근 시 ANSI 컬러 적용(red)
+    printf(COLOR_CYAN "--- Chatting Lobby Room ---\n" COLOR_RESET);
     printf("채팅을 입력하세요.\n \
-        (명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n");
+        (명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n\t/WHISPER 상대방이름 메시지 : 접속한 상대방에게만 메시지를 보내기\n\t/HELP CMD - 모든 명령어(CMD) 사용 방법을 다시 출력한다.)\n");
 
     // 4 단계 : 자식 프로세스에서 수신 담당 프로세스 생성 / 부모 프로세스 : 입력 및 전송 담당
     pid_t pid = fork();
@@ -268,7 +308,7 @@ int main(int argc, char** argv){
 
             // 종료 조건: buf가 "q" 와 정확히 일치할 때 종료
             if (strcmp(buf, "q") == 0) {
-                printf("[클라이언트] 종료 요청 전송 완료. 종료합니다.\n");
+                printf(COLOR_RED "[클라이언트] 종료 요청 전송 완료. 종료합니다.\n" COLOR_RESET);
                 break; // break 시 pid SIGTERM 시그널 발생으로 정리
             }
             
@@ -293,11 +333,11 @@ int main(int argc, char** argv){
                     // 클라이언트에서 먼저 체크 사항: 채팅방 이름 입력 여부, 채팅방 이름 글자 수 제한 충족 여부
                     if(strcmp(ch, "ADD") == 0){
                         if(strlen(str) < 6){
-                            printf("채팅방 이름은 6바이트 미만(한글 2글자미만) 으로 생성할 수 없습니다.\n");
+                            printf(COLOR_RED "채팅방 이름은 6바이트 미만(한글 2글자미만) 으로 생성할 수 없습니다.\n" COLOR_RESET);
                             continue;
                         }
                         if(strlen(str) >= 100){
-                            printf("채팅방 이름은 100바이트 이상 으로 생성할 수 없습니다.\n");
+                            printf(COLOR_RED "채팅방 이름은 100바이트 이상 으로 생성할 수 없습니다.\n" COLOR_RESET);
                             continue;
                         }
                         // pipe 에 보낼 문자열 str 그대로 (명령어 동작이므로 결합 필요없이 그대로 보냄)
@@ -313,14 +353,25 @@ int main(int argc, char** argv){
                     //             /USERS 채팅방이름 - 해당 채팅 채널방에 속해 있는 모든 클라이언트 유저 정보를 출력
                     // chat-dev4 : /LIST all - 모든 채널방 리스트를 출력함
                     // chat-dev4 : /JOIN 채널방이름 - 서버에 활성화된 채팅 채널방으로 이동함
+                    
                     else if (strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0 || strcmp(ch, "JOIN") == 0){
                         // pipe 에 작성할 문자열 작성
                         snprintf(sendMsg, sizeof(sendMsg), "%s", buf);
                         write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
                         kill(getppid(), SIGUSR1);
+                    } else if(strcmp(ch, "WHISPER") == 0){
+                        // chat-dev5 : /WHISPER 사용자이름 메시지 - 서버에 접속한 사용자에게만 귓속말 전달
+                        snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", nickname, str);
+                        write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
+                        kill(getppid(), SIGUSR1);
+                    } else if(strcmp(ch, "HELP") == 0 && strcmp(str, "CMD") == 0){
+                        // chat-dev5 : /HELP CMD - 모든 명령어(CMD) 사용 방법을 다시 출력한다.
+                        char howToCmdUse[BUFSIZ * 5] = "(명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n\t/WHISPER 상대방이름 메시지 : 접속한 상대방에게만 메시지를 보내기\n\t/HELP CMD - 모든 명령어(CMD) 사용 방법을 다시 출력한다.)\n";
+                        printf(COLOR_YELLOW "\n%s\n" COLOR_RESET, howToCmdUse);
+                        fflush(stdout);  // 입력줄 깨지지 않도록
                     }
                 } else { // / 명령어 동작을 잘못했을 경우 예외 처리(클라이언트)
-                        printf("명령어 동작 방법을 확인하고 다시 입력해주세요.\n");
+                        printf(COLOR_RED "명령어 동작 방법을 확인하고 다시 입력해주세요.\n" COLOR_RESET);
                         continue;
                 }
             } else { // chat-dev2 : 자식 클라이언트에서 입력한 문자열이 명령어가 아닐 경우 
@@ -329,7 +380,7 @@ int main(int argc, char** argv){
                 snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, buf);
                 write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
                 kill(getppid(), SIGUSR1);
-            }
+            } 
         }
         kill(pid, SIGTERM); // 자식 프로세스 종료
     } else {
