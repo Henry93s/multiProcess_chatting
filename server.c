@@ -382,48 +382,48 @@ void sigusr1_handler(int signo) {
                     *colon = '\0'; // ' ' 을 문자열 종료로 바꿈
                     strcpy(toNickName, toNickNameAndmsg);
                     strcpy(msg, colon + 1);
-                }
 
-                ///
-                
-                // whisper 하려는 toNickName 이 현재 접속 유저 중에 있는지 find
-                int is_alive = 0;
-                int find_user = -1;
-                for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
-                    if(clients[client_i].pid > 0 && strcmp(clients[client_i].nickName, toNickName) == 0 \
-                    && strcmp(clients[i].nickName, toNickName) != 0) {
-                        is_alive = 1;
-                        find_user = client_i; // 귓속말 대상 클라이언트의 clients 인덱스 저장
-                    } 
-                }
+                    // whisper 하려는 toNickName 이 현재 접속 유저 중에 있는지 find
+                    int is_alive = 0;
+                    int find_user = -1;
+                    for(int client_i = 0; client_i < MAX_CLIENTS; client_i++){
+                        if(clients[client_i].pid > 0 && strcmp(clients[client_i].nickName, toNickName) == 0 \
+                        && strcmp(clients[i].nickName, toNickName) != 0) {
+                            is_alive = 1;
+                            find_user = client_i; // 귓속말 대상 클라이언트의 clients 인덱스 저장
+                        } 
+                    }
 
-                char sendMsg[BUFSIZ * 3];
-                // 귓속말을 하려는 클라이언트가 접속 중이고(pid > 0), 귓속말 요청 클라이언트 닉네임과 실제 접속 중인 닉네임이 일치할 경우(정상)
-                if(is_alive && find_user != -1){
-                    // chat-dev2 : 채팅을 보낼 때 무슨 채팅 채널에서 보냈는지 를 닉네임 앞에 추가함
-                    // 보낼 메시지를 정돈하여 sendMsg 에 반영
-                    char WhereIsRoomAndNickname[BUFSIZ * 2];
-                    snprintf(WhereIsRoomAndNickname, sizeof(WhereIsRoomAndNickname), "[귓속말] - %s 채널(%d) ", rooms[sender_room].roomName, sender_room);
-                    strcat(WhereIsRoomAndNickname, fromnickName);
+                    char sendMsg[BUFSIZ * 3];
+                    // 귓속말을 하려는 클라이언트가 접속 중이고(pid > 0), 귓속말 요청 클라이언트 닉네임과 실제 접속 중인 닉네임이 일치할 경우(정상)
+                    if(is_alive && find_user != -1){
+                        // chat-dev2 : 채팅을 보낼 때 무슨 채팅 채널에서 보냈는지 를 닉네임 앞에 추가함
+                        // 보낼 메시지를 정돈하여 sendMsg 에 반영
+                        char WhereIsRoomAndNickname[BUFSIZ * 2];
+                        snprintf(WhereIsRoomAndNickname, sizeof(WhereIsRoomAndNickname), "[귓속말] - %s 채널(%d) ", rooms[sender_room].roomName, sender_room);
+                        strcat(WhereIsRoomAndNickname, fromnickName);
 
-                    snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", WhereIsRoomAndNickname, msg);
-                    // 귓속말 수신 대상 클라이언트를 관리하는 파이프에 데이터를 작성하고
-                    write(pipe_parent_to_child[find_user][1], sendMsg, strlen(sendMsg));
-                    // 귓속말 수신 대상 클라이언트를 관리하는 자식프로세스에 시그널 알림
-                    kill(clients[find_user].pid, SIGUSR2);
-                    // 귓속말을 보낸 클라이언트에도 파이프에 데이터를 작성 + 자식프로세스에 시그널 알림을 통해서 대화를 주고받도록 함
+                        snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", WhereIsRoomAndNickname, msg);
+                        // 귓속말 수신 대상 클라이언트를 관리하는 파이프에 데이터를 작성하고
+                        write(pipe_parent_to_child[find_user][1], sendMsg, strlen(sendMsg));
+                        // 귓속말 수신 대상 클라이언트를 관리하는 자식프로세스에 시그널 알림
+                        kill(clients[find_user].pid, SIGUSR2);
+                        // 귓속말을 보낸 클라이언트에도 파이프에 데이터를 작성 + 자식프로세스에 시그널 알림을 통해서 대화를 주고받도록 함
+                        write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                        kill(clients[i].pid, SIGUSR2);
+                    } else { // 귓속말을 받을 클라이언트가 없음(수신 대상 없을 때)
+                        snprintf(sendMsg, sizeof(sendMsg), "/WHISPER To_%s: %s", toNickName, "사용자가 접속 중인 닉네임을 정확하게 입력하지 않거나 자기 자신한테는 귓속말을 할 수 없습니다.");
+                        // 귓속말을 받을 대상 클라이언트가 없을 때는 귓속말을 보낸 클라이언트 파이프에 작성하고 자식 스트레스에 시그널 알림
+                        write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
+                        kill(clients[i].pid, SIGUSR2);
+                    }
+                } else { // 귓속말을 받을 대상 닉네임을 명령어 사용 방법(/WHISPER 대상닉네임 메시지) 대로 입력하지 못함. (대상닉네임과 메시지 사이의 공백이 없음)
+                    char sendMsg[BUFSIZ * 3];
+                    snprintf(sendMsg, sizeof(sendMsg), "/WHISPER From_%s: %s", fromnickName, "명령어 사용 방법(/WHISPER 대상닉네임 메시지) 대로 입력했는지 다시 확인해주세요.");
                     write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
                     kill(clients[i].pid, SIGUSR2);
-                } else { // 귓속말을 받을 클라이언트가 없음(수신 대상 없을 때)
-                    snprintf(sendMsg, sizeof(sendMsg), "/WHISPER To_%s: %s", toNickName, "사용자가 접속 중인 닉네임을 정확하게 입력하지 않거나 자기 자신한테는 귓속말을 할 수 없습니다.");
-                    // 귓속말을 받을 대상 클라이언트가 없을 때는 귓속말을 보낸 클라이언트 파이프에 작성하고 자식 스트레스에 시그널 알림
-                    write(pipe_parent_to_child[i][1], sendMsg, strlen(sendMsg));
-                    kill(clients[i].pid, SIGUSR2);
                 }
-                
             }
-            
-            // 추후 /join, /leave 등 다른 명령어 처리 로직 추가 예정
         }
     }
 }

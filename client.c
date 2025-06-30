@@ -8,6 +8,15 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
+// chat-dev5 : ANSI 이스케이프 코드를 사용하여 글자에 색상을 넣기 위한 색 DEFINE
+#define COLOR_RED     "\x1b[31m"
+#define COLOR_GREEN   "\x1b[32m"
+#define COLOR_YELLOW  "\x1b[33m"
+#define COLOR_BLUE    "\x1b[34m"
+#define COLOR_MAGENTA "\x1b[35m"
+#define COLOR_CYAN    "\x1b[36m"
+#define COLOR_RESET   "\x1b[0m"
+
 #define PORT    5101
 
 int sockfd; // 소켓 파일 디스크립터
@@ -15,6 +24,14 @@ char nickname[51]; // 닉네임
 
 // 0625 구조 수정 : 전역 변수로 자식 -> 부모 데이터 파이프 선언
 int pipe_child_to_parent[2];
+
+// chat-dev5 : ANSI 이스케이프 코드를 사용하여 필요 시 화면 clear 기능을 사용하도록 함
+// 위의 선언없이 extern inline void clrscr(void)로 선언
+inline void clrscr(void);		// C99, C11에 대응하기 위해서 사용
+void clrscr(void)				
+{
+    write(1, "\033[1;1H\033[2J", 10);		// ANSI escape 코드로 화면 지우기
+}
 
 // 6 단계 : 클라이언트에서 fork된 자식(수신용) 프로세스가 종료되었을 때 부모가 기다리지 않아서 발생하는 좀비 프로세스 방지 
 void handle_sigchld(int signo) {
@@ -146,8 +163,13 @@ void process_server_message(char *buf) {
             strcpy(nickName, str);
             strcpy(msg, colon + 1);
 
-            // 메시지 출력
-            printf("\n[%s] >>> %s\n", nickName, msg);
+            // chat-dev5 : 귓속말일 경우 YELLOW 색 출력하고 색 RESET
+            if(strcmp(ch, "WHISPER") == 0){
+                printf(COLOR_YELLOW "\n[%s] >>> %s\n" COLOR_RESET, nickName, msg);
+            } else {
+                // 메시지 출력
+                printf("\n[%s] >>> %s\n", nickName, msg);
+            }
             fflush(stdout);  // 입력줄 깨지지 않도록
         } 
     } // chat-dev2 : 서버로 부터 채팅방 개설 요청에 대한 결과를 받고, 이를 클라이언트에 처리 결과를 알림
@@ -155,13 +177,21 @@ void process_server_message(char *buf) {
     // chat-dev4 : /USER all - 서버에 접속한 전체 유저 정보를 출력, /USER 채팅방이름 - 서버의 특정 채팅 채널방에 있는 유저 정보들을 출력
     // chat-dev4 : /LIST all - 서버에 활성화된 채팅채널 목록을 출력함
     // chat-dev4 : /JOIN 채널방이름 - 서버에 활성화된 채팅 채널방으로 이동함
-    else if(strcmp(ch, "ADD") == 0 || strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0 || strcmp(ch, "JOIN") == 0){
+    // chat-dev5 : 각 명령어마다 다른 색으로 ANSI 컬러 적용 후 출력 및 RESET 하도록 함
+    // - ADD, RM : COLOR_BLUE 후 RESET
+    // - LEAVE, JOIN : COLOR_GREEN 후 RESET
+    // - USER, LIST : COLOR_MAGENTA 후 RESET 
+    else if(strcmp(ch, "ADD") == 0 || strcmp(ch, "RM") == 0){
         // 메시지 출력
-        printf("\n%s\n", str);
+        printf(COLOR_CYAN "\n%s\n" COLOR_RESET, str);
         fflush(stdout);  // 입력줄 깨지지 않도록
-    } 
-    // 여기에 다른 서버 응답(/list 응답 등) 처리 로직 추가
-    
+    } else if(strcmp(ch, "LEAVE") == 0 || strcmp(ch, "JOIN") == 0){
+        printf(COLOR_GREEN "\n%s\n" COLOR_RESET, str);
+        fflush(stdout);  // 입력줄 깨지지 않도록
+    } else if(strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0){
+        printf(COLOR_MAGENTA "\n%s\n" COLOR_RESET, str);
+        fflush(stdout);  // 입력줄 깨지지 않도록
+    }
 }
 
 int main(int argc, char** argv){
@@ -203,7 +233,7 @@ int main(int argc, char** argv){
         nickname[strcspn(nickname, "\n")] = 0; // 개행 문자 제거
 
         if (strlen(nickname) == 0) {
-            printf("닉네임은 비워둘 수 없습니다.\n");
+            printf(COLOR_RED "닉네임은 비워둘 수 없습니다.\n");
             continue;
         }
         if (strlen(nickname) >= 50){
@@ -253,7 +283,8 @@ int main(int argc, char** argv){
     register_sigaction(SIGCHLD, handle_sigchld);
     
     // 로비 입장
-    printf("--- Chatting Lobby Room ---\n");
+    // chat-dev5 : 처음 채팅 서버 로비 접근 시 ANSI 컬러 적용(red)
+    printf(COLOR_CYAN "--- Chatting Lobby Room ---\n" COLOR_RESET);
     printf("채팅을 입력하세요.\n \
         (명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n\t/WHISPER 상대방이름 메시지 : 접속한 상대방에게만 메시지를 보내기\n");
 
