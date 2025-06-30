@@ -178,20 +178,22 @@ void process_server_message(char *buf) {
     // chat-dev4 : /LIST all - 서버에 활성화된 채팅채널 목록을 출력함
     // chat-dev4 : /JOIN 채널방이름 - 서버에 활성화된 채팅 채널방으로 이동함
     // chat-dev5 : 각 명령어마다 다른 색으로 ANSI 컬러 적용 후 출력 및 RESET 하도록 함
-    // - ADD, RM : COLOR_BLUE 후 RESET
+    // - ADD, RM : COLOR_CYAN 후 RESET
     // - LEAVE, JOIN : COLOR_GREEN 후 RESET
     // - USER, LIST : COLOR_MAGENTA 후 RESET 
     else if(strcmp(ch, "ADD") == 0 || strcmp(ch, "RM") == 0){
+        clrscr(); // chat-dev5 : ADD 나 RM 시 ANSI 이스케이프 clear 코드 적용
         // 메시지 출력
         printf(COLOR_CYAN "\n%s\n" COLOR_RESET, str);
         fflush(stdout);  // 입력줄 깨지지 않도록
     } else if(strcmp(ch, "LEAVE") == 0 || strcmp(ch, "JOIN") == 0){
+        clrscr(); // ADD 나 RM 시 ANSI 이스케이프 clear 코드 적용
         printf(COLOR_GREEN "\n%s\n" COLOR_RESET, str);
         fflush(stdout);  // 입력줄 깨지지 않도록
     } else if(strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0){
         printf(COLOR_MAGENTA "\n%s\n" COLOR_RESET, str);
         fflush(stdout);  // 입력줄 깨지지 않도록
-    }
+    } 
 }
 
 int main(int argc, char** argv){
@@ -286,7 +288,7 @@ int main(int argc, char** argv){
     // chat-dev5 : 처음 채팅 서버 로비 접근 시 ANSI 컬러 적용(red)
     printf(COLOR_CYAN "--- Chatting Lobby Room ---\n" COLOR_RESET);
     printf("채팅을 입력하세요.\n \
-        (명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n\t/WHISPER 상대방이름 메시지 : 접속한 상대방에게만 메시지를 보내기\n");
+        (명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n\t/WHISPER 상대방이름 메시지 : 접속한 상대방에게만 메시지를 보내기\n\t/HELP CMD - 모든 명령어(CMD) 사용 방법을 다시 출력한다.)\n");
 
     // 4 단계 : 자식 프로세스에서 수신 담당 프로세스 생성 / 부모 프로세스 : 입력 및 전송 담당
     pid_t pid = fork();
@@ -306,7 +308,7 @@ int main(int argc, char** argv){
 
             // 종료 조건: buf가 "q" 와 정확히 일치할 때 종료
             if (strcmp(buf, "q") == 0) {
-                printf("[클라이언트] 종료 요청 전송 완료. 종료합니다.\n");
+                printf(COLOR_RED "[클라이언트] 종료 요청 전송 완료. 종료합니다.\n" COLOR_RESET);
                 break; // break 시 pid SIGTERM 시그널 발생으로 정리
             }
             
@@ -331,11 +333,11 @@ int main(int argc, char** argv){
                     // 클라이언트에서 먼저 체크 사항: 채팅방 이름 입력 여부, 채팅방 이름 글자 수 제한 충족 여부
                     if(strcmp(ch, "ADD") == 0){
                         if(strlen(str) < 6){
-                            printf("채팅방 이름은 6바이트 미만(한글 2글자미만) 으로 생성할 수 없습니다.\n");
+                            printf(COLOR_RED "채팅방 이름은 6바이트 미만(한글 2글자미만) 으로 생성할 수 없습니다.\n" COLOR_RESET);
                             continue;
                         }
                         if(strlen(str) >= 100){
-                            printf("채팅방 이름은 100바이트 이상 으로 생성할 수 없습니다.\n");
+                            printf(COLOR_RED "채팅방 이름은 100바이트 이상 으로 생성할 수 없습니다.\n" COLOR_RESET);
                             continue;
                         }
                         // pipe 에 보낼 문자열 str 그대로 (명령어 동작이므로 결합 필요없이 그대로 보냄)
@@ -362,9 +364,14 @@ int main(int argc, char** argv){
                         snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", nickname, str);
                         write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
                         kill(getppid(), SIGUSR1);
+                    } else if(strcmp(ch, "HELP") == 0 && strcmp(str, "CMD") == 0){
+                        // chat-dev5 : /HELP CMD - 모든 명령어(CMD) 사용 방법을 다시 출력한다.
+                        char howToCmdUse[BUFSIZ * 5] = "(명령어 모음\n\t/ADD 이름 : 채널방을 '이름' 으로 개설 요청\n\t/LEAVE lobby : 현재 있는 채널방을 나오고 로비 채널로 이동하도록 요청\n\t/RM 채널방이름 : 로비가 아닌 채널방을 없애기\n\t/USER all : 접속한 전체 유저 정보 출력\n\t/USER 채널방이름 : 해당 채널방에 있는 유저 정보 출력\n\t/LIST all : 모든 채팅 채널 리스트를 출력함\n\t/JOIN 채팅채널이름 : 입력한 채팅방에 들어가기\n\t/WHISPER 상대방이름 메시지 : 접속한 상대방에게만 메시지를 보내기\n\t/HELP CMD - 모든 명령어(CMD) 사용 방법을 다시 출력한다.)\n";
+                        printf(COLOR_YELLOW "\n%s\n" COLOR_RESET, howToCmdUse);
+                        fflush(stdout);  // 입력줄 깨지지 않도록
                     }
                 } else { // / 명령어 동작을 잘못했을 경우 예외 처리(클라이언트)
-                        printf("명령어 동작 방법을 확인하고 다시 입력해주세요.\n");
+                        printf(COLOR_RED "명령어 동작 방법을 확인하고 다시 입력해주세요.\n" COLOR_RESET);
                         continue;
                 }
             } else { // chat-dev2 : 자식 클라이언트에서 입력한 문자열이 명령어가 아닐 경우 
