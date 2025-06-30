@@ -47,7 +47,7 @@ int child_index = -1; // 자식 프로세스 전용 인덱스
 // conn_fd : 클라이언트와 연결이 성공된 직후 사용되는 소켓 -> accept 성공 후 생성되고 자식에 넘기고 부모는 닫음
 // 6 단계 : graceful_shutdown 을 위해 main 지역 변수에서 전역 변수로 이동
 int listen_fd, conn_fd;
-// 7 단계 : 서버 데몬화 처리 및 로그 출력을 파일로 리디렉션
+// 7 단계 : 서버 데몬화 처리 및 로그 출력을 파일로 리디렉션을 위한 로그 파일 디스크립터
 int file_fd;
 
 // 7단계 : 로그 출력을 위해서 시간을 [YYYY-MM-DD HH:MM:SS] 형식으로 문자열을 생성하는 함수
@@ -782,11 +782,12 @@ int main(int argc, char** argv) {
             // 6 단계 : 새로 찾은 인덱스를 자신의 인덱스(자식)으로 사용
             child_index = new_client_idx; // 자식 전용 인덱스 설정
 
-            // 파이프 정리
-            close(pipe_child_to_parent[child_index][0]); // 부모는 pipe_child_to_parent 파이프에서 write 만 유지
-            close(pipe_parent_to_child[child_index][1]); // 부모는 pipe_parent_to_child 파이프에서 read 만 유지
-
-            // 자식이 읽는 파이프를 non-blocking 으로 설정 (부모 write 가 막히지 않도록 하기 위함)
+            // 파이프 정리 (250630 주석 수정)
+            // 자식 프로세스는 pipe_child_to_parent(write 기준) 파이프에서 write 만 유지
+            close(pipe_child_to_parent[child_index][0]); 
+            // 자식 프로세스는 pipe_parent_to_child(write 기준) 파이프에서 read 만 유지
+            close(pipe_parent_to_child[child_index][1]); 
+            // 자식이 부모프로세스로부터 읽는 파이프를 non-blocking 으로 설정 (부모 write 가 막히지 않도록 하기 위함)
             int flags = fcntl(pipe_parent_to_child[child_index][0], F_GETFL, 0);
             fcntl(pipe_parent_to_child[child_index][0], F_SETFL, flags | O_NONBLOCK);
             
@@ -830,7 +831,7 @@ int main(int argc, char** argv) {
                 buf[n] = '\0'; // 문자열 끝 처리
 
                 // 자식 프로세스에서 서버 부모 프로세스에 데이터를 파이프 작성으로 통해서 전달하도록 함
-                write(pipe_child_to_parent[child_index][1], buf, n); // 3->4단계: 자식 → 부모로 write
+                write(pipe_child_to_parent[child_index][1], buf, n); // 3->4단계: 자식 → 부모로 write 하기 위한 파이프 작성
                 // 7단계 : LOG Redirection
                 char logMsg[BUFSIZ * 2 + 32];
                 char errMsg[BUFSIZ * 2];
@@ -852,10 +853,12 @@ int main(int argc, char** argv) {
             strcpy(clients[new_client_idx].nickName, "GUEST"); // 임시 닉네임
             clients[new_client_idx].room_idx = 0; // 기본적으로 로비에 참가
 
-            close(pipe_child_to_parent[new_client_idx][1]); // 부모는 child_to_parent 파이프에서 read 만 유지
-            close(pipe_parent_to_child[new_client_idx][0]); // 부모는 parent_to_child 파이프에서 write 만 유지
-
-            // 부모가 읽는 파이프를 non-blocking 모드로 설정해 핸들러가 멈추지 않도록 함
+            // 파이프 정리 (250630 주석 수정)
+            // 부모는 child_to_parent(write 기준) 파이프에서 read 만 유지
+            close(pipe_child_to_parent[new_client_idx][1]); 
+            // 부모는 parent_to_child(write 기준) 파이프에서 write 만 유지
+            close(pipe_parent_to_child[new_client_idx][0]); 
+            // 부모가 자식프로세스로부터 읽는 파이프를 non-blocking 모드로 설정해 핸들러가 멈추지 않도록 함
             int flags = fcntl(pipe_child_to_parent[new_client_idx][0], F_GETFL, 0);
             fcntl(pipe_child_to_parent[new_client_idx][0], F_SETFL, flags | O_NONBLOCK);
 
@@ -867,6 +870,6 @@ int main(int argc, char** argv) {
     }
 
     close(file_fd); // 로그 파일 디스크립터 닫음
-    close(listen_fd);
+    close(listen_fd); // listening 파일 디스크립터를 닫음
     return 0;
 }
