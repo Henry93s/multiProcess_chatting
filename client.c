@@ -74,6 +74,7 @@ void sigusr1_handler(int signo){
         // client 자식으로부터 받은 버퍼 메시지 문자열 분리
         // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
         // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+        // chat-dev5 : /WHISPER 사용자이름 - 서버에 접속한 사용자에게만 귓속말 전달
         char* space = strchr(buf, ' ');
         if (space != NULL) {
             sscanf(buf, "/%s", ch);
@@ -83,7 +84,8 @@ void sigusr1_handler(int signo){
         if(ch == NULL){
             return;
         }
-        if(strcmp(ch, "MSG") == 0){
+        // chat-dev5 : /WHISPER 사용자이름 - 서버에 접속한 사용자에게만 귓속말 전달
+        if(strcmp(ch, "MSG") == 0 || strcmp(ch, "WHISPER") == 0){
             char nickName[51];
             char msg[BUFSIZ];
 
@@ -98,7 +100,11 @@ void sigusr1_handler(int signo){
                 // 서버로 보낼 메시지 프로토콜 생성
                 char sendMsg[BUFSIZ + 12 + 50];
                 // 서버에 보낼 문자열 결합
-                snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, msg);
+                if(strcmp(ch, "MSG") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, msg);
+                } else if(strcmp(ch, "WHISPER") == 0){
+                    snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", nickname, msg);
+                }
                 
                 // 파이프에 있는 문자열을 서버로 보냄
                 write(sockfd, sendMsg, strlen(sendMsg));
@@ -117,6 +123,7 @@ void process_server_message(char *buf) {
     // 서버로부터 받은 버퍼 문자열 분리
     // chat-dev2 : 버그 수정 - 메시지에 공백이 있을 때 공백을 메시지에 포함하지 못하는 경우 수정
     // => sscanf 는 공백 포함 문자열을 담기 어렵기 때문에 strchr 과 strcpy 구조로 변경
+    // chat-dev5 : /WHISPER 사용자이름 - 서버에 접속한 사용자에게만 귓속말 전달
     char* space = strchr(buf, ' ');
     if (space != NULL) {
         sscanf(buf, "/%s", ch);
@@ -127,7 +134,7 @@ void process_server_message(char *buf) {
         return;
     }
 
-    if (strcmp(ch, "MSG") == 0) {
+    if (strcmp(ch, "MSG") == 0 || strcmp(ch, "WHISPER") == 0) {
         char nickName[51];
         char msg[BUFSIZ];
 
@@ -313,9 +320,15 @@ int main(int argc, char** argv){
                     //             /USERS 채팅방이름 - 해당 채팅 채널방에 속해 있는 모든 클라이언트 유저 정보를 출력
                     // chat-dev4 : /LIST all - 모든 채널방 리스트를 출력함
                     // chat-dev4 : /JOIN 채널방이름 - 서버에 활성화된 채팅 채널방으로 이동함
+                    
                     else if (strcmp(ch, "LEAVE") == 0 || strcmp(ch, "RM") == 0 || strcmp(ch, "USER") == 0 || strcmp(ch, "LIST") == 0 || strcmp(ch, "JOIN") == 0){
                         // pipe 에 작성할 문자열 작성
                         snprintf(sendMsg, sizeof(sendMsg), "%s", buf);
+                        write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
+                        kill(getppid(), SIGUSR1);
+                    } else if(strcmp(ch, "WHISPER") == 0){
+                        // chat-dev5 : /WHISPER 사용자이름 메시지 - 서버에 접속한 사용자에게만 귓속말 전달
+                        snprintf(sendMsg, sizeof(sendMsg), "/WHISPER %s:%s", nickname, str);
                         write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
                         kill(getppid(), SIGUSR1);
                     }
@@ -329,7 +342,7 @@ int main(int argc, char** argv){
                 snprintf(sendMsg, sizeof(sendMsg), "/MSG %s:%s", nickname, buf);
                 write(pipe_child_to_parent[1], sendMsg, strlen(sendMsg));
                 kill(getppid(), SIGUSR1);
-            }
+            } 
         }
         kill(pid, SIGTERM); // 자식 프로세스 종료
     } else {
