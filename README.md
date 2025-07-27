@@ -88,9 +88,9 @@
     ```
 
 5.  **서버 종료**
-    실행 중인 서버 프로세스의 PID를 찾아 `kill` 명령어로 종료합니다.
+    실행 중인 서버 프로세스(Ss : 최상위 데몬 프로세스) 의 PID를 찾아 `kill` 명령어로 종료합니다.
     ```bash
-    ps -ef | grep server
+    ps aux | grep server
     kill [PID]
     ```
 
